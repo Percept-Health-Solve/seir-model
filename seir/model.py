@@ -11,7 +11,51 @@ def _assert_vectors(nb_groups, nb_infectious, vectors: list):
 
 class NInfectiousModel:
 
-    def __init__(self, nb_groups: int, nb_infectious: int, t_inc: float, alpha, q_se, q_ii, q_ir, q_id, beta, delta):
+    def __init__(self, nb_groups: int, nb_infectious: int, t_inc: float, alpha, q_se, q_ii, q_ir, q_id, delta, beta):
+        """Creates a generalised multi-population-group SEIR model with multiple infectious states I and two removed
+        populations R (recovering and isolated) and D (dying and isolated). The model ignores the social dynamics
+        between population groups and assumes that any member of an infectious sub-population can infect all members
+        of the susceptible population.
+
+        Params
+        ------
+
+        nb_groups: int
+            The number of population groups to keep track of. The individual population groups can have their own
+            transition dynamics within the model.
+
+        nb_infectious: int
+            The number of infected states in the model.
+
+        t_inc: float
+            The incubation time of the disease, transitioning between the exposed and infected states.
+
+        alpha: [nb_group X nb_infectious] array
+            The proportion of the population leaving the E state and entering each of the infected states.
+            The rows of this array must sum to 1.
+
+        q_se: [nb_infectious X 1] array
+            The transition rates from the S state to the E state. This is interpreted as the number of secondary
+            infections on the susceptible population caused by a member of the corresponding infectious state.
+
+        q_ii: [nb_group X nb_infectious X nb_infectious] array
+            The transition rates between infectious states. The columns of the each q_ii[j] matrix must sum
+            to 0 for the population to be preserved.
+
+        q_ir: [nb_group X nb_infectious] array
+            The transition rates from the I states to the R states for each population group.
+
+        q_id: [nb_group X nb_infectious] array
+            The transition from the I states to the R states for each population group.
+
+        delta: [nb_group X nb_infectious] array
+            The proportion of I states undergoing transitions from one I state to another I state for each population
+            group. Conversely, 1 - delta represents the proportion of the population that are transitioning to the
+            removed states R and D.
+
+        beta: [nb_group X nb_infectious] array
+            The mortality rate of the I states undergoing a transition from I to D
+        """
         alpha = np.asarray(alpha)
         q_se = np.asarray(q_se)
         q_ii = np.asarray(q_ii)
@@ -95,7 +139,40 @@ class NInfectiousModel:
 
         return dydt
 
-    def solve(self, init_vectors: dict, t):
+    def solve(self, init_vectors: dict, t) -> tuple:
+        """Solve the SEIR equations for this model.
+
+        Params
+        ------
+
+        init_vectors: dict
+            A dictionary representing the initial states of the S, E, I, R, and D states of our model, corresponding
+            to keys 's_0', 'e_0', 'i_0', 'r_0', and 'd_0', respectively. If a key is not found, the model assumes
+            a zero vector for the corresponding intiial state.
+
+        t: array
+            The time values to solve the ODE over.
+
+        Returns
+        -------
+
+        The function returns a tuple comprising the following elements.
+
+        s_t: numpy.ndarray
+            The solution of the S state with shape (len(t), nb_groups)
+
+        e_t: numpy.ndarray
+            The solution of the E state with shape (len(t), nb_groups)
+
+        i_t: numpy.ndarray
+            The solution of the I state with shape (len(t), nb_groups, nb_infectious)
+
+        r_t: numpy.ndarray
+            The solution of the R state with shape(len(t), nb_groups, nb_infectious)
+
+        d_t: numpy.ndarray
+            The solution of the D state with shape(len(t), nb_groups, nb_infectious)
+        """
         s_0 = init_vectors.get('s_0')
         e_0 = init_vectors.get('e_0')
         i_0 = init_vectors.get('i_0')
@@ -140,14 +217,9 @@ class NInfectiousModel:
 
         s_t = s_t.reshape(-1, self.nb_groups)
         e_t = e_t.reshape(-1, self.nb_groups)
-        if self.nb_groups > 1:
-            i_t = i_t.reshape(-1, self.nb_groups, self.nb_infectious)
-            r_t = r_t.reshape(-1, self.nb_groups, self.nb_infectious)
-            d_t = d_t.reshape(-1, self.nb_groups, self.nb_infectious)
-        else:
-            i_t = i_t.reshape(-1, self.nb_infectious)
-            r_t = r_t.reshape(-1, self.nb_infectious)
-            d_t = d_t.reshape(-1, self.nb_infectious)
+        i_t = i_t.reshape(-1, self.nb_groups, self.nb_infectious)
+        r_t = r_t.reshape(-1, self.nb_groups, self.nb_infectious)
+        d_t = d_t.reshape(-1, self.nb_groups, self.nb_infectious)
 
         out = {
             's_t': s_t,
@@ -162,7 +234,7 @@ class NInfectiousModel:
         self._solved = True
         self._solution = out
 
-        return out
+        return s_t, e_t, i_t, r_t, d_t
 
     @property
     def N(self):
