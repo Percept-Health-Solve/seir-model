@@ -30,8 +30,8 @@ init_vectors = {
 
 t = np.linspace(0, 300, 10000)
 
-solution = model.solve(init_vectors, t)
+s_t, e_t, i_t, r_t, d_t = model.solve(init_vectors, t)
 
-plt.plot(t, np.sum(solution['d_t'], axis=(2)))
+plt.plot(t, np.sum(i_t, axis=(2)))
 plt.show()
 
