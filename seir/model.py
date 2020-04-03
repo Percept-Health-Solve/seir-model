@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+
 from scipy.integrate import odeint
 
 
@@ -108,7 +110,7 @@ class NInfectiousModel:
             'r': self.nb_groups * 2 + self.nb_groups * self.nb_infectious * 2
         }
 
-    def ode(self, y, t, N):
+    def ode(self, y, t, N, infectious_func):
         idx_s = self.y_idx_dict['s']
         idx_e = self.y_idx_dict['e']
         idx_i = self.y_idx_dict['i']
@@ -120,8 +122,8 @@ class NInfectiousModel:
         # r = y[idx_i:idx_r].reshape(self.nb_groups, self.nb_infectious)
         # d = y[idx_r:].reshape(self.nb_groups, self.nb_infectious)
 
-        dsdt = - 1 / N * self.q_se.dot(np.sum(i, axis=0)) * s
-        dedt = 1 / N * self.q_se.dot(np.sum(i, axis=0)) * s - e / self.t_inc
+        dsdt = - 1 / N * self.q_se.dot(np.sum(i, axis=0)) * infectious_func(t) * s
+        dedt = 1 / N * self.q_se.dot(np.sum(i, axis=0)) * infectious_func(t) * s - e / self.t_inc
         didt = self.alpha * e / self.t_inc \
                - np.array([self.q_ii[idx].dot(self.delta[idx] * i[idx]) for idx in range(self.nb_groups)]) \
                - self.q_ir * (1 - self.delta) * (1 - self.beta) * i \
@@ -139,7 +141,7 @@ class NInfectiousModel:
 
         return dydt
 
-    def solve(self, init_vectors: dict, t) -> tuple:
+    def solve(self, init_vectors: dict, t, infectious_func=None, to_csv: bool = False, fp: str = None) -> tuple:
         """Solve the SEIR equations for this model.
 
         Params
@@ -152,6 +154,16 @@ class NInfectiousModel:
 
         t: array
             The time values to solve the ODE over.
+
+        infectious_func: callable
+            A function that takes one input (time) and returns a multiplicative factor on the infectious rate. This can
+            be used to model quarantines or periods of high infectivity.
+
+        to_csv: bool (default = False)
+            Sets where to save the solution to a csv.
+
+        fp: str (default = None)
+            The filepath of the desired csv.
 
         Returns
         -------
@@ -173,6 +185,15 @@ class NInfectiousModel:
         d_t: numpy.ndarray
             The solution of the D state with shape(len(t), nb_groups, nb_infectious)
         """
+        if infectious_func is not None:
+            assert callable(infectious_func), "infectious_func is not callable"
+        else:
+            infectious_func = lambda x: 1
+        if to_csv and fp is None:
+            raise ValueError("Attempting to save solution but no file path is specified.")
+        if not to_csv and fp is not None:
+            raise Warning('File path given but to_csv = False')
+
         s_0 = init_vectors.get('s_0')
         e_0 = init_vectors.get('e_0')
         i_0 = init_vectors.get('i_0')
@@ -207,7 +228,18 @@ class NInfectiousModel:
         N = np.sum(y_0)
         N_g = s_0.reshape(self.nb_groups) + e_0.reshape(self.nb_groups) + np.sum(i_0 + r_0 + d_0, axis=1)
 
-        solution = odeint(self.ode, y_0, t, args=(N,))
+        solution = odeint(self.ode, y_0, t, args=(N,infectious_func))
+
+        if to_csv:
+            s_cols = [f'S_{i}' for i in range(self.nb_groups)]
+            e_cols = [f'E_{i}' for i in range(self.nb_groups)]
+            i_cols = [f'I_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+            r_cols = [f'R_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+            d_cols = [f'D_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+            cols = s_cols + e_cols + i_cols + r_cols + d_cols
+            df = pd.DataFrame(solution, columns=cols)
+            df.insert(0, 'Day', t)
+            df.to_csv(fp, index=False)
 
         s_t = solution[:, :self.y_idx_dict['s']]
         e_t = solution[:, self.y_idx_dict['s']: self.y_idx_dict['e']]
@@ -221,18 +253,10 @@ class NInfectiousModel:
         r_t = r_t.reshape(-1, self.nb_groups, self.nb_infectious)
         d_t = d_t.reshape(-1, self.nb_groups, self.nb_infectious)
 
-        out = {
-            's_t': s_t,
-            'e_t': e_t,
-            'i_t': i_t,
-            'r_t': r_t,
-            'd_t': d_t
-        }
-
         self._N = N
         self._N_g = N_g
         self._solved = True
-        self._solution = out
+        self._solution = (s_t, e_t, i_t, r_t, d_t)
 
         return s_t, e_t, i_t, r_t, d_t
 
