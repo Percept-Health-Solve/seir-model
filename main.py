@@ -27,21 +27,23 @@ model = NInfectiousModel(
 
 init_vectors = {
     's_0': [27000000, 8000000],
+    'e_0': [240, 0],
     'i_0': [[0, 100, 0, 0], [0, 0, 0, 0]]
 }
 t = np.linspace(0, 300, 10000)
-solution = model.solve(init_vectors, t)
+infectious_func = lambda t: 1 if t <= 7 else 0.2 if 7 < t < 28 else 1
+solution = model.solve(init_vectors, t, infectious_func, to_csv=True, fp='data/solution.csv')
 
 # plot all figures
 fig, axes = plot_solution(solution, t)
 plt.show()
 
 # plot young
-fig, axes = plot_solution(solution, t, 0)
-plt.show()
-
-# plot old
-fig, axes = plot_solution(solution, t, 1)
-plt.show()
+# fig, axes = plot_solution(solution, t, 0)
+# plt.show()
+#
+# # plot old
+# fig, axes = plot_solution(solution, t, 1)
+# plt.show()
 
 
