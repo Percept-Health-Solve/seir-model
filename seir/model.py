@@ -13,7 +13,19 @@ def _assert_vectors(nb_groups, nb_infectious, vectors: list):
 
 class NInfectiousModel:
 
-    def __init__(self, nb_groups: int, nb_infectious: int, t_inc: float, alpha, q_se, q_ii, q_ir, q_id, delta, beta):
+    def __init__(self,
+                 nb_groups: int,
+                 nb_infectious: int,
+                 t_inc: float,
+                 alpha,
+                 q_se,
+                 q_ii,
+                 q_ir,
+                 q_id,
+                 delta,
+                 beta,
+                 infectious_func=None,
+                 imported_func=None):
         """Creates a generalised multi-population-group SEIR model with multiple infectious states I and two removed
         populations R (recovering and isolated) and D (dying and isolated). The model ignores the social dynamics
         between population groups and assumes that any member of an infectious sub-population can infect all members
@@ -57,6 +69,14 @@ class NInfectiousModel:
 
         beta: [nb_group X nb_infectious] array
             The mortality rate of the I states undergoing a transition from I to D
+
+        infectious_func: callable, default=None
+            A function that takes one input (time) and returns a multiplicative factor on the infectious rate. This can
+            be used to model quarantines or periods of high infectivity.
+
+        imported_func: callable, default=None
+            A function that takes one input argument (time) and returns the rate of change in infections for that time.
+            Used to seed the model with imported cases.
         """
         alpha = np.asarray(alpha)
         q_se = np.asarray(q_se)
@@ -89,6 +109,19 @@ class NInfectiousModel:
         assert np.all(np.sum(alpha, axis=1) == 1)
         assert np.all(np.sum(q_ii, axis=1) == 0)
 
+        # check infectious func
+        if infectious_func is not None:
+            assert callable(infectious_func), "infectious_func is not callable"
+        else:
+            infectious_func = lambda x: 1
+
+        # check imported func
+        if imported_func is not None:
+            assert callable(imported_func), "imported_func is not callable"
+        else:
+            imported_func = lambda x: 0
+
+        # set public properties
         self.nb_groups = nb_groups
         self.nb_infectious = nb_infectious
         self.t_inc = t_inc
@@ -99,6 +132,10 @@ class NInfectiousModel:
         self.q_id = q_id
         self.beta = beta
         self.delta = delta
+        self.infectious_func = infectious_func
+        self.imported_func = imported_func
+
+        # set private properties
         self._solved = False
         self._solution = None
         self._N = 0
@@ -110,7 +147,7 @@ class NInfectiousModel:
             'r': self.nb_groups * 2 + self.nb_groups * self.nb_infectious * 2
         }
 
-    def ode(self, y, t, N, infectious_func):
+    def ode(self, y, t, N):
         idx_s = self.y_idx_dict['s']
         idx_e = self.y_idx_dict['e']
         idx_i = self.y_idx_dict['i']
@@ -122,12 +159,13 @@ class NInfectiousModel:
         # r = y[idx_i:idx_r].reshape(self.nb_groups, self.nb_infectious)
         # d = y[idx_r:].reshape(self.nb_groups, self.nb_infectious)
 
-        dsdt = - 1 / N * self.q_se.dot(np.sum(i, axis=0)) * infectious_func(t) * s
-        dedt = 1 / N * self.q_se.dot(np.sum(i, axis=0)) * infectious_func(t) * s - e / self.t_inc
+        dsdt = - 1 / N * self.q_se.dot(np.sum(i, axis=0)) * self.infectious_func(t) * s
+        dedt = 1 / N * self.q_se.dot(np.sum(i, axis=0)) * self.infectious_func(t) * s - e / self.t_inc
         didt = self.alpha * e / self.t_inc \
-               - np.array([self.q_ii[idx].dot(self.delta[idx] * i[idx]) for idx in range(self.nb_groups)]) \
-               - self.q_ir * (1 - self.delta) * (1 - self.beta) * i \
-               - self.q_id * (1 - self.delta) * self.beta * i
+            - np.array([self.q_ii[idx].dot(self.delta[idx] * i[idx]) for idx in range(self.nb_groups)]) \
+            - self.q_ir * (1 - self.delta) * (1 - self.beta) * i \
+            - self.q_id * (1 - self.delta) * self.beta * i \
+            + self.imported_func(t)
         drdt = self.q_ir * (1 - self.delta) * (1 - self.beta) * i
         dddt = self.q_id * (1 - self.delta) * self.beta * i
 
@@ -141,7 +179,7 @@ class NInfectiousModel:
 
         return dydt
 
-    def solve(self, init_vectors: dict, t, infectious_func=None, to_csv: bool = False, fp: str = None) -> tuple:
+    def solve(self, init_vectors: dict, t, to_csv: bool = False, fp: str = None) -> tuple:
         """Solve the SEIR equations for this model.
 
         Params
@@ -154,10 +192,6 @@ class NInfectiousModel:
 
         t: array
             The time values to solve the ODE over.
-
-        infectious_func: callable
-            A function that takes one input (time) and returns a multiplicative factor on the infectious rate. This can
-            be used to model quarantines or periods of high infectivity.
 
         to_csv: bool (default = False)
             Sets where to save the solution to a csv.
@@ -185,10 +219,6 @@ class NInfectiousModel:
         d_t: numpy.ndarray
             The solution of the D state with shape(len(t), nb_groups, nb_infectious)
         """
-        if infectious_func is not None:
-            assert callable(infectious_func), "infectious_func is not callable"
-        else:
-            infectious_func = lambda x: 1
         if to_csv and fp is None:
             raise ValueError("Attempting to save solution but no file path is specified.")
         if not to_csv and fp is not None:
@@ -228,7 +258,7 @@ class NInfectiousModel:
         N = np.sum(y_0)
         N_g = s_0.reshape(self.nb_groups) + e_0.reshape(self.nb_groups) + np.sum(i_0 + r_0 + d_0, axis=1)
 
-        solution = odeint(self.ode, y_0, t, args=(N,infectious_func))
+        solution = odeint(self.ode, y_0, t, args=(N,))
 
         if to_csv:
             s_cols = [f'S_{i}' for i in range(self.nb_groups)]
@@ -268,7 +298,7 @@ class NInfectiousModel:
         else:
             raise ValueError('Attempted to return N when model has not been solved!')
 
-    @ property
+    @property
     def N_g(self):
         # TODO: Add ability to solve N_g given some initial vectors
         if self._solved:
@@ -276,7 +306,7 @@ class NInfectiousModel:
         else:
             raise ValueError('Attempted to return N_g when model has not been solved!')
 
-    @ property
+    @property
     def solution(self):
         if self._solved:
             return self._solution
