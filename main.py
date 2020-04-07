@@ -13,7 +13,7 @@ q_ii = np.array([
 q_ii = np.repeat(np.expand_dims(q_ii, 0), 2, axis=0)
 
 infectious_func = lambda t: 1 if t <= 17 else 0.2 if 17 < t < 38 else 1
-imported_func = lambda t: [[0, 9 * np.exp(0.11*t), 0, 0], [0, 0, 0, 0]] if t < 16 else 0
+imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
 
 model = NInfectiousModel(
     nb_groups=2,
@@ -38,13 +38,16 @@ init_vectors = {
 t = np.linspace(0, 300, 10000)
 solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
 
+print(model.r_0_eff)
+print(model.r_0)
+
 # plot all figures
 fig, axes = plot_solution(solution, t)
 
 # for row in axes:
 #     for ax in row:
 #         ax.set_xlim((0, 50))
-#         ax.set_ylim((0, 2000))
+#         ax.set_ylim((0, 50))
 
 plt.show()
 
