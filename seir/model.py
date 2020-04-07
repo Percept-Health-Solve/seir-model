@@ -26,7 +26,6 @@ class NInfectiousModel:
                  beta,
                  infectious_func=None,
                  imported_func=None,
-                 extend_vars=False):
                  extend_vars=True):
         """Creates a generalised multi-population-group SEIR model with multiple infectious states I and two removed
         populations R (recovering and isolated) and D (dying and isolated). The model ignores the social dynamics
