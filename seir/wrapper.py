@@ -105,6 +105,32 @@ class MultiPopWrapper(NInfectiousModel):
         # find nb_infectious
         nb_infectious = len(inf_labels)
 
+        self.pop_categories = pop_categories
+        self.pop_labels = ['_'.join(x) for x in cat_list_product]
+        self.inf_labels = inf_labels.copy()
+        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(nb_groups)}
+        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(nb_groups)}
+        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(nb_infectious)}
+        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(nb_infectious)}
+
+        if isinstance(delta, dict):
+            d = np.zeros((nb_groups, nb_infectious))
+            for key in delta:
+                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
+                for pop_idx in pop_idx_match:
+                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
+                    d[i] = np.asarray(delta[key])
+            delta = d
+
+        if isinstance(beta, dict):
+            b = np.zeros((nb_groups, nb_infectious))
+            for key in beta:
+                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
+                for pop_idx in pop_idx_match:
+                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
+                    b[i] = np.asarray(beta[key])
+            beta = b
+
         super(MultiPopWrapper, self).__init__(
             nb_groups,
             nb_infectious,
@@ -121,14 +147,6 @@ class MultiPopWrapper(NInfectiousModel):
             extend_vars
         )
 
-        self.pop_categories = pop_categories
-        self.pop_labels = ['_'.join(x) for x in cat_list_product]
-        self.inf_labels = inf_labels.copy()
-        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(self.nb_groups)}
-        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(self.nb_groups)}
-        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(self.nb_infectious)}
-        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(self.nb_infectious)}
-
     def _to_csv(self, solution, t, fp):
         pop_label = lambda i: self.idx_to_pop_label[i]
         inf_label = lambda i: self.idx_to_inf_label[i]
@@ -142,3 +160,31 @@ class MultiPopWrapper(NInfectiousModel):
         df.insert(0, 'Day', t)
         df.to_csv(fp, index=False)
 
+    def _parse_init_vectors(self, init_vectors: dict) -> tuple:
+        s_0 = init_vectors.get('s_0')
+        e_0 = init_vectors.get('e_0')
+        i_0 = init_vectors.get('i_0')
+        r_0 = init_vectors.get('r_0')
+        d_0 = init_vectors.get('d_0')
+
+        s_0 = self._parse_pop_vector(s_0)
+        e_0 = self._parse_pop_vector(e_0)
+        i_0 = self._parse_pop_vector(i_0, states='multi')
+        r_0 = self._parse_pop_vector(r_0, states='multi')
+        d_0 = self._parse_pop_vector(d_0, states='multi')
+
+        return s_0, e_0, i_0, r_0, d_0
+
+    def _parse_pop_vector(self, dict_vector, states='single'):
+        # TODO: Fix coding structure here
+        assert states in ['single', 'multi']
+        if isinstance(dict_vector, dict):
+            default = 0 if states == 'single' else [0] * self.nb_infectious
+            vector = [dict_vector.get(self.idx_to_pop_label[i], default) for i in range(self.nb_groups)]
+        else:
+            if states == 'single':
+                vector = np.zeros(self.nb_groups) if dict_vector is None else dict_vector
+            else:
+                vector = np.zeros((self.nb_groups, self.nb_infectious)) if dict_vector is None else dict_vector
+        vector = np.asarray(vector)
+        return vector

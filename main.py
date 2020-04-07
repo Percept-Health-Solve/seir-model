@@ -35,7 +35,7 @@ init_vectors = {
     'e_0': [0, 0],
     'i_0': [[0, 0, 0, 0], [0, 0, 0, 0]]
 }
-t = np.linspace(0, 300, 10000)
+t = np.linspace(0, 300, 3001)
 solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
 
 print(model.r_0_eff)
@@ -44,12 +44,12 @@ print(model.r_0)
 # plot all figures
 fig, axes = plot_solution(solution, t)
 
-# for row in axes:
-#     for ax in row:
-#         ax.set_xlim((0, 50))
-#         ax.set_ylim((0, 50))
+for row in axes:
+    for ax in row:
+        ax.set_xlim((0, 50))
+        ax.set_ylim((0, 2000))
 
-plt.show()
+# plt.show()
 
 # plot young
 # fig, axes = plot_solution(solution, t, 0)

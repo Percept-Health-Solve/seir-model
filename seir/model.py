@@ -26,7 +26,7 @@ class NInfectiousModel:
                  beta,
                  infectious_func=None,
                  imported_func=None,
-                 extend_vars=False):
+                 extend_vars=True):
         """Creates a generalised multi-population-group SEIR model with multiple infectious states I and two removed
         populations R (recovering and isolated) and D (dying and isolated). The model ignores the social dynamics
         between population groups and assumes that any member of an infectious sub-population can infect all members
@@ -83,7 +83,7 @@ class NInfectiousModel:
             A function that takes one input argument (time) and returns the rate of change in infections for that time.
             Used to seed the model with imported cases.
 
-        extend_vars: bool, default=False
+        extend_vars: bool, default=True
             Whether to assume that the given transition rates apply to all population groups. Useful when data on
             certain transition rates between population groups are unknown but data on average transitions rates are
             available.
@@ -282,17 +282,7 @@ class NInfectiousModel:
         if not to_csv and fp is not None:
             raise Warning('File path given but to_csv = False')
 
-        s_0 = init_vectors.get('s_0')
-        e_0 = init_vectors.get('e_0')
-        i_0 = init_vectors.get('i_0')
-        r_0 = init_vectors.get('r_0')
-        d_0 = init_vectors.get('d_0')
-
-        s_0 = np.zeros(self.nb_groups) if s_0 is None else np.asarray(s_0)
-        e_0 = np.zeros(self.nb_groups) if e_0 is None else np.asarray(e_0)
-        i_0 = np.zeros((self.nb_groups, self.nb_infectious)) if i_0 is None else np.asarray(i_0)
-        r_0 = np.zeros((self.nb_groups, self.nb_infectious)) if r_0 is None else np.asarray(r_0)
-        d_0 = np.zeros((self.nb_groups, self.nb_infectious)) if d_0 is None else np.asarray(d_0)
+        s_0, e_0, i_0, r_0, d_0 = self._parse_init_vectors(init_vectors)
 
         assert s_0.shape == (self.nb_groups,) or s_0.shape == (self.nb_groups, 1)
         assert e_0.shape == (self.nb_groups,) or e_0.shape == (self.nb_groups, 1)
@@ -350,3 +340,18 @@ class NInfectiousModel:
         df = pd.DataFrame(solution, columns=cols)
         df.insert(0, 'Day', t)
         df.to_csv(fp, index=False)
+
+    def _parse_init_vectors(self, init_vectors: dict) -> tuple:
+        s_0 = init_vectors.get('s_0')
+        e_0 = init_vectors.get('e_0')
+        i_0 = init_vectors.get('i_0')
+        r_0 = init_vectors.get('r_0')
+        d_0 = init_vectors.get('d_0')
+
+        s_0 = np.zeros(self.nb_groups) if s_0 is None else np.asarray(s_0)
+        e_0 = np.zeros(self.nb_groups) if e_0 is None else np.asarray(e_0)
+        i_0 = np.zeros((self.nb_groups, self.nb_infectious)) if i_0 is None else np.asarray(i_0)
+        r_0 = np.zeros((self.nb_groups, self.nb_infectious)) if r_0 is None else np.asarray(r_0)
+        d_0 = np.zeros((self.nb_groups, self.nb_infectious)) if d_0 is None else np.asarray(d_0)
+
+        return s_0, e_0, i_0, r_0, d_0
