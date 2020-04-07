@@ -14,8 +14,8 @@ q_ii = np.array([
 # q_ii = np.repeat(np.expand_dims(q_ii, 0), 2, axis=0)
 
 infectious_func = lambda t: 1 if t <= 17 else 0.2 if 17 < t < 38 else 1
-imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
-imported_func = lambda t: 1
+# imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
+imported_func = None
 
 model = MultiPopWrapper(
     pop_categories={'age': ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
@@ -31,8 +31,8 @@ model = MultiPopWrapper(
     q_id=[0, 0, 0, 1/5],
     delta={'20-29': [0, 0.012, 0.05, 0],
            '60-69': [0, 0.166, 0.274, 0]},
-    beta={'20-29': [0, 0.012, 0.05, 0],
-          '60-69': [0, 0.166, 0.274, 0]},
+    beta={'20-29': [0, 0, 0, 0.609],
+          '60-69': [0, 0, 0, 0.589]},
     infectious_func=infectious_func,
     imported_func=imported_func,
     extend_vars=True
@@ -43,8 +43,9 @@ print(model.nb_groups)
 print(model.pop_labels)
 
 init_vectors = {
-    's_0': {'20-29_male_low': 29000000,
-            '60-69_male_low': 8000000}
+    's_0': {'20-29_male_low': 27000000,
+            '60-69_male_low': 8000000},
+    'i_0': {'20-29_male_low': [0, 100, 0, 0]}
 }
 
 t = np.linspace(0, 300, 1501)
@@ -60,7 +61,7 @@ fig, axes = plot_solution(solution, t)
 #         ax.set_xlim((0, 50))
 #         ax.set_ylim((0, 50))
 
-# plt.show()
+plt.show()
 
 # plot young
 # fig, axes = plot_solution(solution, t, 0)
