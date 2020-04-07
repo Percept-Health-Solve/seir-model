@@ -25,7 +25,8 @@ class NInfectiousModel:
                  delta,
                  beta,
                  infectious_func=None,
-                 imported_func=None):
+                 imported_func=None,
+                 extend_vars=False):
         """Creates a generalised multi-population-group SEIR model with multiple infectious states I and two removed
         populations R (recovering and isolated) and D (dying and isolated). The model ignores the social dynamics
         between population groups and assumes that any member of an infectious sub-population can infect all members
@@ -44,31 +45,35 @@ class NInfectiousModel:
         t_inc: float
             The incubation time of the disease, transitioning between the exposed and infected states.
 
-        alpha: [nb_group X nb_infectious] array
+        alpha: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The proportion of the population leaving the E state and entering each of the infected states.
-            The rows of this array must sum to 1.
+            The rows of this array must sum to 1. Can only have shape (nb_infectious,) if extend_vars is True.
 
         q_se: [nb_infectious X 1] array
             The transition rates from the S state to the E state. This is interpreted as the number of secondary
             infections on the susceptible population caused by a member of the corresponding infectious state.
 
-        q_ii: [nb_group X nb_infectious X nb_infectious] array
+        q_ii: [nb_group X nb_infectious X nb_infectious] or [nb_infectious X nb_infectious] array
             The transition rates between infectious states. The columns of the each q_ii[j] matrix must sum
-            to 0 for the population to be preserved.
+            to 0 for the population to be preserved. Can only have shape (nb_infectious, nb_infectious) if extend_vars
+            is True.
 
-        q_ir: [nb_group X nb_infectious] array
-            The transition rates from the I states to the R states for each population group.
+        q_ir: [nb_group X nb_infectious] or [nb_infectious X 1] array
+            The transition rates from the I states to the R states for each population group. Can only have shape
+            (nb_infectious) if extend_vars is True.
 
-        q_id: [nb_group X nb_infectious] array
-            The transition from the I states to the R states for each population group.
+        q_id: [nb_group X nb_infectious] or [nb_infectious X 1] array
+            The transition from the I states to the R states for each population group. Can only have shape
+            (nb_infectious,) if extend_vars is True.
 
-        delta: [nb_group X nb_infectious] array
+        delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The proportion of I states undergoing transitions from one I state to another I state for each population
             group. Conversely, 1 - delta represents the proportion of the population that are transitioning to the
-            removed states R and D.
+            removed states R and D. Can only have shape (nb_infectious,) if extend_vars is True.
 
-        beta: [nb_group X nb_infectious] array
-            The mortality rate of the I states undergoing a transition from I to D
+        beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+            The mortality rate of the I states undergoing a transition from I to D. Can only have shape (nb_infectious,)
+            if extend_vars is True.
 
         infectious_func: callable, default=None
             A function that takes one input (time) and returns a multiplicative factor on the infectious rate. This can
@@ -77,6 +82,11 @@ class NInfectiousModel:
         imported_func: callable, default=None
             A function that takes one input argument (time) and returns the rate of change in infections for that time.
             Used to seed the model with imported cases.
+
+        extend_vars: bool, default=False
+            Whether to assume that the given transition rates apply to all population groups. Useful when data on
+            certain transition rates between population groups are unknown but data on average transitions rates are
+            available.
         """
         alpha = np.asarray(alpha)
         q_se = np.asarray(q_se)
@@ -93,6 +103,14 @@ class NInfectiousModel:
             beta = np.reshape(1, *beta.shape) if beta.ndim == 1 else beta
             delta = np.reshape(1, *delta.shape) if delta.ndim == 1 else delta
             alpha = np.reshape(1, *alpha.shape) if alpha.ndim == 1 else alpha
+
+        if extend_vars is True:
+            alpha = np.broadcast_to(alpha, (nb_groups, nb_infectious)) if alpha.ndim == 1 else alpha
+            q_ii = np.broadcast_to(q_ii, (nb_groups, nb_infectious, nb_infectious)) if q_ii.ndim == 2 else q_ii
+            q_ir = np.broadcast_to(q_ir, (nb_groups, nb_infectious)) if q_ir.ndim == 1 else q_ir
+            q_id = np.broadcast_to(q_id, (nb_groups, nb_infectious)) if q_id.ndim == 1 else q_id
+            delta = np.broadcast_to(delta, (nb_groups, nb_infectious)) if delta.ndim == 1 else delta
+            beta = np.broadcast_to(beta, (nb_groups, nb_infectious)) if beta.ndim == 1 else beta
 
         # assert variables
         assert nb_groups > 0
@@ -147,6 +165,46 @@ class NInfectiousModel:
             'r': self.nb_groups * 2 + self.nb_groups * self.nb_infectious * 2
         }
 
+    @property
+    def N(self):
+        # TODO: Add ability to solve N given some initial vectors
+        if self._solved:
+            return self._N
+        else:
+            raise ValueError('Attempted to return N when model has not been solved!')
+
+    @property
+    def N_g(self):
+        # TODO: Add ability to solve N_g given some initial vectors
+        if self._solved:
+            return self._N_g
+        else:
+            raise ValueError('Attempted to return N_g when model has not been solved!')
+
+    @property
+    def solution(self):
+        if self._solved:
+            return self._solution
+        else:
+            raise ValueError('Attempted to return solution when model has not been solved!')
+
+    @property
+    def r_0_eff(self):
+        out = [
+            self.q_se / (
+                    np.diag(self.q_ii[g]) * self.delta[g]
+                    + self.q_ir[g] * (1 - self.beta[g]) * (1 - self.delta[g])
+                    + self.q_id[g] * self.beta[g] * (1 - self.delta[g])
+            ) for g in range(self.nb_groups)
+        ]
+        return np.array(out)
+
+    @property
+    def r_0(self):
+        r_0_eff = self.r_0_eff
+        out = 1 / self.N * np.sum([self.N_g[g] * self.alpha[g].dot(r_0_eff[g]) for g in range(self.nb_groups)])
+        return out
+
     def ode(self, y, t, N):
         idx_s = self.y_idx_dict['s']
         idx_e = self.y_idx_dict['e']
@@ -159,8 +217,8 @@ class NInfectiousModel:
         # r = y[idx_i:idx_r].reshape(self.nb_groups, self.nb_infectious)
         # d = y[idx_r:].reshape(self.nb_groups, self.nb_infectious)
 
-        dsdt = - 1 / N * self.q_se.dot(np.sum(i, axis=0)) * self.infectious_func(t) * s
-        dedt = 1 / N * self.q_se.dot(np.sum(i, axis=0)) * self.infectious_func(t) * s - e / self.t_inc
+        dsdt = - 1 / N * (self.infectious_func(t) * self.q_se).dot(np.sum(i, axis=0)) * s
+        dedt = 1 / N * (self.infectious_func(t) * self.q_se).dot(np.sum(i, axis=0)) * s - e / self.t_inc
         didt = self.alpha * e / self.t_inc \
             - np.array([self.q_ii[idx].dot(self.delta[idx] * i[idx]) for idx in range(self.nb_groups)]) \
             - self.q_ir * (1 - self.delta) * (1 - self.beta) * i \
@@ -261,15 +319,7 @@ class NInfectiousModel:
         solution = odeint(self.ode, y_0, t, args=(N,))
 
         if to_csv:
-            s_cols = [f'S_{i}' for i in range(self.nb_groups)]
-            e_cols = [f'E_{i}' for i in range(self.nb_groups)]
-            i_cols = [f'I_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
-            r_cols = [f'R_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
-            d_cols = [f'D_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
-            cols = s_cols + e_cols + i_cols + r_cols + d_cols
-            df = pd.DataFrame(solution, columns=cols)
-            df.insert(0, 'Day', t)
-            df.to_csv(fp, index=False)
+            self._to_csv(solution, t, fp)
 
         s_t = solution[:, :self.y_idx_dict['s']]
         e_t = solution[:, self.y_idx_dict['s']: self.y_idx_dict['e']]
@@ -290,25 +340,13 @@ class NInfectiousModel:
 
         return s_t, e_t, i_t, r_t, d_t
 
-    @property
-    def N(self):
-        # TODO: Add ability to solve N given some initial vectors
-        if self._solved:
-            return self._N
-        else:
-            raise ValueError('Attempted to return N when model has not been solved!')
-
-    @property
-    def N_g(self):
-        # TODO: Add ability to solve N_g given some initial vectors
-        if self._solved:
-            return self._N_g
-        else:
-            raise ValueError('Attempted to return N_g when model has not been solved!')
-
-    @property
-    def solution(self):
-        if self._solved:
-            return self._solution
-        else:
-            raise ValueError('Attempted to return solution when model has not been solved!')
+    def _to_csv(self, solution, t, fp):
+        s_cols = [f'S_{i}' for i in range(self.nb_groups)]
+        e_cols = [f'E_{i}' for i in range(self.nb_groups)]
+        i_cols = [f'I_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+        r_cols = [f'R_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+        d_cols = [f'D_{i}_{j}' for i in range(self.nb_groups) for j in range(self.nb_infectious)]
+        cols = s_cols + e_cols + i_cols + r_cols + d_cols
+        df = pd.DataFrame(solution, columns=cols)
+        df.insert(0, 'Day', t)
+        df.to_csv(fp, index=False)

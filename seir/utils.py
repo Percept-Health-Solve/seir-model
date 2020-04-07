@@ -9,12 +9,17 @@ mpl.rcParams['figure.figsize'] = (13, 8)
 mpl.rcParams['figure.dpi'] = 100
 
 
-def plot_solution(solution, t, group=None):
+def plot_solution(solution, t, group=None, show_cumulative=False):
     s_t, e_t, i_t, r_t, d_t = solution
     if group is None:
         fig, axes = plt.subplots(2, 2, sharex=True)
 
-        # axes[0, 0].plot(t, np.sum(i_t[:, :, 1], axis=-1) + np.sum(r_t[:, :, 1], axis=-1) + np.sum(d_t[:, :, 1], axis=-1), label='Cumulative Infections')
+        if show_cumulative:
+            axes[0, 0].plot(
+                t,
+                np.sum(i_t[:, :, 1:] + r_t[:, :, 1:] + d_t[:, :, 1:], axis=(1, 2)),
+                label='Cumulative Infections'
+            )
         axes[0, 0].plot(t, np.sum(i_t, axis=(1, 2)), label='Total Infected')
         axes[0, 0].plot(t, np.sum(i_t[:, :, 0], axis=-1), label='Infected Asymptomatic')
         axes[0, 0].plot(t, np.sum(i_t[:, :, 1], axis=-1), label='Infected Symptomatic')
