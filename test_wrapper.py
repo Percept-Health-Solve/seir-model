@@ -62,10 +62,10 @@ s_t, e_t, i_t, r_t, d_t = solution
 # plot all figures
 fig, axes = plot_solution(solution, t)
 
-# for row in axes:
-#     for ax in row:
-#         ax.set_xlim((0, 50))
-#         ax.set_ylim((0, 50))
+for row in axes:
+    for ax in row:
+        ax.set_xlim((0, 50))
+        ax.set_ylim((0, 2000))
 
 plt.show()
 
