@@ -24,8 +24,8 @@ model = NInfectiousModel(
     q_ii=q_ii,
     q_ir=[[1/10, 1/2.3, 1/8, 1/10], [1/10, 1/2.3, 1/8, 1/10]],
     q_id=[[0, 0, 0, 1/5], [0, 0, 0, 1/5]],
-    delta=[[0, 0.012, 0.05, 0], [0, 0.166, 0.274, 0]],
-    beta=[[0, 0, 0, 0.609], [0, 0, 0, 0.589]],
+    rho_delta=[[0, 0.012, 0.05, 0], [0, 0.166, 0.274, 0]],
+    rho_beta=[[0, 0, 0, 0.609], [0, 0, 0, 0.589]],
     infectious_func=infectious_func,
     imported_func=imported_func
 )

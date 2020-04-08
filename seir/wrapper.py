@@ -16,8 +16,8 @@ class MultiPopWrapper(NInfectiousModel):
                  q_ii,
                  q_ir,
                  q_id,
-                 delta,
-                 beta,
+                 rho_delta,
+                 rho_beta,
                  infectious_func=None,
                  imported_func=None,
                  extend_vars:bool = False):
@@ -63,12 +63,12 @@ class MultiPopWrapper(NInfectiousModel):
             The transition from the I states to the R states for each population group. Can only have shape
             (nb_infectious,) if extend_vars is True.
 
-        delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The proportion of I states undergoing transitions from one I state to another I state for each population
-            group. Conversely, 1 - delta represents the proportion of the population that are transitioning to the
+            group. Conversely, 1 - rho represents the proportion of the population that are transitioning to the
             removed states R and D. Can only have shape (nb_infectious,) if extend_vars is True.
 
-        beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The mortality rate of the I states undergoing a transition from I to D. Can only have shape (nb_infectious,)
             if extend_vars is True.
 
@@ -114,8 +114,8 @@ class MultiPopWrapper(NInfectiousModel):
         self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(self.nb_infectious)}
 
         alpha = self._parse_dict_or_vector_input(alpha)
-        delta = self._parse_dict_or_vector_input(delta)
-        beta = self._parse_dict_or_vector_input(beta)
+        rho_delta = self._parse_dict_or_vector_input(rho_delta)
+        rho_beta = self._parse_dict_or_vector_input(rho_beta)
 
         super(MultiPopWrapper, self).__init__(
             self.nb_groups,
@@ -126,8 +126,8 @@ class MultiPopWrapper(NInfectiousModel):
             q_ii,
             q_ir,
             q_id,
-            delta,
-            beta,
+            rho_delta,
+            rho_beta,
             infectious_func,
             imported_func,
             extend_vars
@@ -147,6 +147,8 @@ class MultiPopWrapper(NInfectiousModel):
             temp = np.zeros((self.nb_groups, self.nb_infectious))
             for key in input:
                 pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
+                if len(pop_idx_match) == 0:
+                    raise ValueError(f'Given key {key} not found in population categories.')
                 for pop_idx in pop_idx_match:
                     i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
                     temp[i] = np.asarray(input[key])
