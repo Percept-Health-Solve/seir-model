@@ -102,38 +102,24 @@ class MultiPopWrapper(NInfectiousModel):
             nb_groups *= len(pop_categories[key])
         cat_list_product = itertools.product(*pop_cat_list)
 
-        # find nb_infectious
-        nb_infectious = len(inf_labels)
+        self.nb_groups = nb_groups
+        self.nb_infectious = len(inf_labels)
 
         self.pop_categories = pop_categories
         self.pop_labels = ['_'.join(x) for x in cat_list_product]
         self.inf_labels = inf_labels.copy()
-        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(nb_groups)}
-        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(nb_groups)}
-        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(nb_infectious)}
-        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(nb_infectious)}
+        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(self.nb_groups)}
+        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(self.nb_groups)}
+        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(self.nb_infectious)}
+        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(self.nb_infectious)}
 
-        if isinstance(delta, dict):
-            d = np.zeros((nb_groups, nb_infectious))
-            for key in delta:
-                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
-                for pop_idx in pop_idx_match:
-                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
-                    d[i] = np.asarray(delta[key])
-            delta = d
-
-        if isinstance(beta, dict):
-            b = np.zeros((nb_groups, nb_infectious))
-            for key in beta:
-                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
-                for pop_idx in pop_idx_match:
-                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
-                    b[i] = np.asarray(beta[key])
-            beta = b
+        alpha = self._parse_dict_or_vector_input(alpha)
+        delta = self._parse_dict_or_vector_input(delta)
+        beta = self._parse_dict_or_vector_input(beta)
 
         super(MultiPopWrapper, self).__init__(
-            nb_groups,
-            nb_infectious,
+            self.nb_groups,
+            self.nb_infectious,
             t_inc,
             alpha,
             q_se,
@@ -146,6 +132,27 @@ class MultiPopWrapper(NInfectiousModel):
             imported_func,
             extend_vars
         )
+
+    def _parse_dict_or_vector_input(self, input):
+        assert isinstance(input, list) or isinstance(input, np.ndarray) or isinstance(input, dict), \
+            f"Input {input} is not array-like or a dictionary."
+        if isinstance(input, dict):
+            # check dictionary values
+            for key in input:
+                assert isinstance(input[key], list) or isinstance(input[key], np.ndarray), \
+                    f"Input key {key} contains a non-array-like structure {input[key]}."
+                assert len(input[key]) == self.nb_infectious, \
+                    f"Input key {key} with value {input[key]} is not of length {self.nb_infectious}."
+            # create output
+            temp = np.zeros((self.nb_groups, self.nb_infectious))
+            for key in input:
+                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
+                for pop_idx in pop_idx_match:
+                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
+                    temp[i] = np.asarray(input[key])
+            out = temp
+            return out
+        return np.asarray(input)
 
     def _to_csv(self, solution, t, fp):
         pop_label = lambda i: self.idx_to_pop_label[i]
