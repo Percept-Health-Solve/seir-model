@@ -2,12 +2,15 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import datetime
+
 from seir.wrapper import MultiPopWrapper
 from seir.utils import plot_solution
 
-infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 43 else 0.75
+infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 43 else 0.7 # scenario 1
+# infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 64 else 1 # scenario 2
 # imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
-c = 0.8
+c = 0.9
 a = 0.25
 imported_func = lambda t: {'0-9_male_urban': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
                            '10-19_male_urban': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
@@ -101,15 +104,21 @@ s_t, e_t, i_t, r_t, d_t = solution
 # plot all figures
 fig, axes = plot_solution(solution, t, show_detected=True)
 
+# all time plot
+axes[1, 0].set_xticks((0, 50, 100, 150, 200, 250, 300))
+axes[1, 0].set_xticklabels(('05-Mar', '24-Apr', '13-Jun', '02-Aug', '21-Sep', '10-Nov', '30-Dec'))
+
+# 90 day plot
 # for row in axes:
 #     for ax in row:
-#         ax.set_xlim((0, 60))
+#         ax.set_xlim((0, 90))
 #         ax.set_ylim((0, 2000))
 #         ax.axvline(x=22, color='k', ls='--', lw=0.8)
-#         ax.axvline(x=43, color='k', ls='--', lw=0.8)
+#         ax.axvline(x=64, color='k', ls='--', lw=0.8)
 #
 # axes[0, 1].set_ylim((0, 100))
 # axes[1, 1].set_ylim((0, 50))
+# axes[1, 0].set_xticklabels(('05-Mar', '15-Mar', '25-Mar', '04-Apr', '14-Apr', '24-Apr', '04-May', '14-May', '24-May', '03-Jun'))
 
 plt.show()
 
@@ -120,14 +129,16 @@ i_total = np.sum(i_t[:, :, 1], axis=-1)
 sev_total = np.sum(i_t[:, :, 2:], axis=(1, 2))
 h_total = np.sum(i_t[:, :, -2], axis=-1)
 icu_total = np.sum(i_t[:, :, -1], axis=-1)
+detected_total = 0.6 * np.sum(i_t[:, :, 1] + r_t[:, :, 1] + d_t[:, :, 1], axis=-1) \
+                + np.sum(i_t[:, :, 2:] + r_t[:, :, 2:] + d_t[:, :, 2:], axis=(1, 2))
 r_total = np.sum(r_t, axis=(1, 2))
 d_total = np.sum(d_t, axis=(1, 2))
 
-df_total = pd.DataFrame(np.concatenate([[s_total], [e_total], [a_total], [i_total], [sev_total], [h_total], [icu_total], [r_total], [d_total]]).T,
-                        columns=['S', 'E', 'Asymptomatic', 'Mild', 'Severe Total', 'Hospitalised', 'ICU', 'R', 'Dead'])
+df_total = pd.DataFrame(np.concatenate([[s_total], [e_total], [a_total], [i_total], [sev_total], [h_total], [icu_total], [r_total], [d_total], [detected_total]]).T,
+                        columns=['S', 'E', 'Asymptomatic', 'Mild', 'Severe Total', 'Hospitalised', 'ICU', 'R', 'Dead', 'Cumulative Detected'])
 df_total['Time'] = t
 df_total['Day'] = np.floor(df_total['Time'])
-df_total = df_total[df_total['Day'] <= 60]
+# df_total = df_total[df_total['Day'] <= 90]
 df_total = df_total.groupby('Day').sum() * 0.2
 df_total.drop(columns='Time', inplace=True)
 df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total'] + df_total['R'] + df_total['Dead']
