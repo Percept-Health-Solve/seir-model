@@ -113,9 +113,13 @@ class MultiPopWrapper(NInfectiousModel):
         self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(self.nb_infectious)}
         self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(self.nb_infectious)}
 
+        # parse dict/vectors correctly
         alpha = self._parse_dict_or_vector_input(alpha)
         rho_delta = self._parse_dict_or_vector_input(rho_delta)
         rho_beta = self._parse_dict_or_vector_input(rho_beta)
+
+        # parse dict functions correctly
+        imported_func = self._parse_dict_or_func(imported_func)
 
         super(MultiPopWrapper, self).__init__(
             self.nb_groups,
@@ -156,6 +160,27 @@ class MultiPopWrapper(NInfectiousModel):
             return out
         return np.asarray(input)
 
+    def _parse_dict_or_func(self, input):
+        if input is None:
+            return lambda t: np.zeros((self.nb_groups, self.nb_infectious))
+        assert callable(input), \
+            "Input parameter is not callable."
+
+        def wrapped_func(t):
+            if isinstance(input(t), dict):
+                out = np.zeros((self.nb_groups, self.nb_infectious))
+                func_dict = input(t)
+                for key in func_dict:
+                    idx = self.pop_label_to_idx[key]
+                    out[idx] = np.asarray(func_dict[key])
+                return out
+            else:
+                return input(t)
+
+        return wrapped_func
+
+
+
     def _to_csv(self, solution, t, fp):
         pop_label = lambda i: self.idx_to_pop_label[i]
         inf_label = lambda i: self.idx_to_inf_label[i]
@@ -186,6 +211,7 @@ class MultiPopWrapper(NInfectiousModel):
 
     def _parse_pop_vector(self, dict_vector, states='single'):
         # TODO: Fix coding structure here
+        # TODO: Add exception for case when dictionary contains invalid keys
         assert states in ['single', 'multi']
         if isinstance(dict_vector, dict):
             default = 0 if states == 'single' else [0] * self.nb_infectious
