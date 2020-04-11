@@ -12,30 +12,30 @@ infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 43 else 0.7 # sce
 # imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
 c = 0.9
 a = 0.25
-imported_func = lambda t: {'0-9_male_urban': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '10-19_male_urban': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '20-29_male_urban': [0, 0.0657 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '30-39_male_urban': [0, 0.1768 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '40-49_male_urban': [0, 0.0960 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '50-59_male_urban': [0, 0.1717 * c * np.exp(a*t), 0, 0, 0, 0],
-                           '60-69_male_urban': [0, 0, 0.0758 * c * np.exp(a*t), 0, 0, 0],
-                           '70-79_male_urban': [0, 0, 0.0202 * c * np.exp(a*t), 0, 0, 0],
-                           '80+_male_urban': [0, 0, 0.0051 * c * np.exp(a*t), 0, 0, 0],
-                           '0-9_female_urban': [0, 0 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '10-19_female_urban': [0, 0.0101 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '20-29_female_urban': [0, 0.0606 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '30-39_female_urban': [0, 0.1111 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '40-49_female_urban': [0, 0.0556 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '50-59_female_urban': [0, 0.0657 * c * np.exp(a * t), 0, 0, 0, 0],
-                           '60-69_female_urban': [0, 0, 0.0152 * c * np.exp(a * t), 0, 0, 0],
-                           '70-79_female_urban': [0, 0, 0.0303 * c * np.exp(a * t), 0, 0, 0],
-                           '80+_female_urban': [0, 0, 0 * c * np.exp(a * t), 0, 0, 0]
+imported_func = lambda t: {'0-9_male_high': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '10-19_male_high': [0, 0.0101 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '20-29_male_high': [0, 0.0657 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '30-39_male_high': [0, 0.1768 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '40-49_male_high': [0, 0.0960 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '50-59_male_high': [0, 0.1717 * c * np.exp(a*t), 0, 0, 0, 0],
+                           '60-69_male_high': [0, 0, 0.0758 * c * np.exp(a*t), 0, 0, 0],
+                           '70-79_male_high': [0, 0, 0.0202 * c * np.exp(a*t), 0, 0, 0],
+                           '80+_male_high': [0, 0, 0.0051 * c * np.exp(a*t), 0, 0, 0],
+                           '0-9_female_high': [0, 0 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '10-19_female_high': [0, 0.0101 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '20-29_female_high': [0, 0.0606 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '30-39_female_high': [0, 0.1111 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '40-49_female_high': [0, 0.0556 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '50-59_female_high': [0, 0.0657 * c * np.exp(a * t), 0, 0, 0, 0],
+                           '60-69_female_high': [0, 0, 0.0152 * c * np.exp(a * t), 0, 0, 0],
+                           '70-79_female_high': [0, 0, 0.0303 * c * np.exp(a * t), 0, 0, 0],
+                           '80+_female_high': [0, 0, 0 * c * np.exp(a * t), 0, 0, 0]
                            } if t < 22 else 0
 
 model = MultiPopWrapper(
     pop_categories={'age': ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
                     'sex': ['male', 'female'],
-                    'density': ['urban', 'rural']
+                    'density': ['high', 'low']
                     },
     inf_labels=['AS', 'M', 'S', 'SI', 'H', 'ICU'],
     alpha={'0-9': [0.179, 0.821 * 0.999, 0.821 * 0.001, 0, 0, 0],
@@ -83,15 +83,15 @@ model = MultiPopWrapper(
 )
 
 # get s0 from file:
-df = pd.read_csv('data/Startpop_2density_0comorbidity.csv', index_col=0)
-df['density'] = df['density'].map({'High': 'urban', 'Low': 'rural'})
+df = pd.read_csv('data/Startpop_2density_0comorbidity.csv') #, index_col=0)
+df['density'] = df['density'].map({'High': 'high', 'Low': 'low'})
 df['label'] = df['age'].str.lower() + '_' + df['sex'].str.lower() + '_' + df['density'].str.lower()
 df_dict = df[['label', 'Population']].to_dict()
 s_0 = {df_dict['label'][i]: df_dict['Population'][i] for i in df_dict['label'].keys()}
 
 init_vectors = {
     's_0': s_0,
-    'i_0': {'30-39_male_urban': [0, 0, 0, 0, 0, 0]}
+    'i_0': {'30-39_male_high': [0, 0, 0, 0, 0, 0]}
 }
 
 t = np.linspace(0, 300, 1501)
