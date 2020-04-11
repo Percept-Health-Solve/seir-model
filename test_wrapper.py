@@ -94,7 +94,8 @@ init_vectors = {
     'i_0': {'30-39_male_high': [0, 0, 0, 0, 0, 0]}
 }
 
-t = np.linspace(0, 300, 1501)
+periods_per_day = 5
+t = np.linspace(0, 300, 300 * periods_per_day + 1)
 solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
 
 print(model.r_0)
@@ -139,7 +140,7 @@ df_total = pd.DataFrame(np.concatenate([[s_total], [e_total], [a_total], [i_tota
 df_total['Time'] = t
 df_total['Day'] = np.floor(df_total['Time'])
 # df_total = df_total[df_total['Day'] <= 90]
-df_total = df_total.groupby('Day').sum() * 0.2
+df_total = df_total.groupby('Day').sum() / periods_per_day
 df_total.drop(columns='Time', inplace=True)
 df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total'] + df_total['R'] + df_total['Dead']
 df_total.to_csv('data/daily.csv')
