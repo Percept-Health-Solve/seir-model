@@ -19,18 +19,18 @@ imported_func = lambda t: {'0-9_male_high': [0, 0.0101 * c * (1-s) * np.exp(a*t)
                            '30-39_male_high': [0, 0.1768 * c * (1-s) * np.exp(a*t), 0.1768 * c * s * np.exp(a*t), 0, 0, 0],
                            '40-49_male_high': [0, 0.0960 * c * (1-s) * np.exp(a*t), 0.0960 * c * s * np.exp(a*t), 0, 0, 0],
                            '50-59_male_high': [0, 0.1717 * c * (1-s) * np.exp(a*t), 0.1717 * c * s * np.exp(a*t), 0, 0, 0],
-                           '60-69_male_high': [0, 0, 0.0758 * c * (1-s) * np.exp(a*t), 0, 0, 0],
-                           '70-79_male_high': [0, 0, 0.0202 * c * (1-s) * np.exp(a*t), 0, 0, 0],
-                           '80+_male_high': [0, 0, 0.0051 * c * (1-s) * np.exp(a*t), 0, 0, 0],
+                           '60-69_male_high': [0, 0, 0.0758 * c * np.exp(a*t), 0, 0, 0],
+                           '70-79_male_high': [0, 0, 0.0202 * c * np.exp(a*t), 0, 0, 0],
+                           '80+_male_high': [0, 0, 0.0051 * c * np.exp(a*t), 0, 0, 0],
                            '0-9_female_high': [0, 0 * c * (1-s) * np.exp(a * t), 0 * c * s * np.exp(a * t), 0, 0, 0],
                            '10-19_female_high': [0, 0.0101 * c * (1-s) * np.exp(a * t), 0.0101 * c * s * np.exp(a * t), 0, 0, 0],
                            '20-29_female_high': [0, 0.0606 * c * (1-s) * np.exp(a * t), 0.0606 * c * s * np.exp(a * t), 0, 0, 0],
                            '30-39_female_high': [0, 0.1111 * c * (1-s) * np.exp(a * t), 0.1111 * c * s * np.exp(a * t), 0, 0, 0],
                            '40-49_female_high': [0, 0.0556 * c * (1-s) * np.exp(a * t), 0.0556 * c * s * np.exp(a * t), 0, 0, 0],
                            '50-59_female_high': [0, 0.0657 * c * (1-s) * np.exp(a * t), 0.0657 * c * s * np.exp(a * t), 0, 0, 0],
-                           '60-69_female_high': [0, 0, 0.0152 * c * (1-s) * np.exp(a * t), 0, 0, 0],
-                           '70-79_female_high': [0, 0, 0.0303 * c * (1-s) * np.exp(a * t), 0, 0, 0],
-                           '80+_female_high': [0, 0, 0 * c * (1-s) * np.exp(a * t), 0, 0, 0]
+                           '60-69_female_high': [0, 0, 0.0152 * c * np.exp(a * t), 0, 0, 0],
+                           '70-79_female_high': [0, 0, 0.0303 * c * np.exp(a * t), 0, 0, 0],
+                           '80+_female_high': [0, 0, 0 * c * np.exp(a * t), 0, 0, 0]
                            } if t < 22 else 0
 
 model = MultiPopWrapper(
