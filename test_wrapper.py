@@ -11,7 +11,7 @@ infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 43 else 0.7 # sce
 # infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 64 else 1 # scenario 2
 # imported_func = lambda t: [[0, 0.75 * 9 * np.exp(0.11*t), 0, 0], [0, 0.25 * 9 * np.exp(0.11*t), 5, 0]] if t < 16 else 0
 c = 0.9
-s = 0.25         # proportion of imported cases below 60 that are severe (1-s are mild); assume 100% 60+ are severe
+s = 0.0         # proportion of imported cases below 60 that are severe (1-s are mild); assume 100% 60+ are severe
 a = 0.25
 imported_func = lambda t: {'0-9_male_high': [0, 0.0101 * c * (1-s) * np.exp(a*t), 0.0101 * c * s * np.exp(a*t), 0, 0, 0],
                            '10-19_male_high': [0, 0.0101 * c * (1-s) * np.exp(a*t), 0.0101 * c * s * np.exp(a*t), 0, 0, 0],
