@@ -2,6 +2,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# dev TODO notes:
+# fix beta parameters
+# add graphs to compare_scenarios
+# higher asymptomatic scenario
+
 import datetime
 
 from seir.wrapper import MultiPopWrapper
@@ -62,9 +67,9 @@ for scenario in range(len(lockdown_scenarios)):
           [0, 0, 0, 0, 0, 0],
           [0, 0, 0, 0, 0, 0],
           [0, 0, 1 / 2.3, 0, 0, 0],
-          [0, 0, -1 / 2.3, 1 / 2.7, 0, 0],
-          [0, 0, 0, -1 / 2.7, 1 / 6, 0],
-          [0, 0, 0, 0, -1 / 6, 0]
+          [0, 0, -1 / 2.3, 1 / 2.7, 0, 0],   # changed hospital LOS to 8 days after 
+          [0, 0, 0, -1 / 2.7, 1 / 8, 0],     # discussion with Barry 14/4/20
+          [0, 0, 0, 0, -1 / 8, 0]
       ],
       q_ir=[1 / 10, 1 / 2.3, 0, 0, 1 / 8, 1 / 10],
       q_id=[0, 0, 0, 0, 0, 1 / 5],
@@ -160,5 +165,5 @@ for scenario in range(len(lockdown_scenarios)):
   df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total'] + df_total['R'] + df_total['Dead']
   df_total['IFR'] = df_total['Dead'] / df_total['Cumulative Infections']
   df_total['CFR'] = df_total['Dead'] / df_total['Cumulative Detected']
-  df_total.to_csv('data/daily_scenario_'+str(scenario+1)+'.csv')
+  df_total.to_csv('data/daily_scenario_'+str(scenario+1)+'.csv',index=False)
 
