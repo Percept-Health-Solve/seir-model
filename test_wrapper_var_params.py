@@ -31,13 +31,13 @@ for key in ferguson:
   ferguson[key].append(ferguson[key][2]/ferguson[key][1]/ferguson[key][0])
 
 # variable parameters for front-end
-descr = '3a_R0_5'
+descr = '4a_R0_3.5_imported_scale_1.4_lockdown_0.5'
 asymptomatic_prop = 0.7             # 0.2-0.8
-asymp_rel_infectivity = 0.5         # 0.3 - 1
+asymp_rel_infectivity = 0.4         # 0.3 - 1
 asymp_prop_imported = 0.0           # 0 - 0.8
-r0 = 5.0                            # 1.5 - 5.5
-lockdown_ratio = 0.5                # 0.25 - 0.8
-imported_scale = 1.0                # 0.5 - 2
+r0 = 3.5                            # 1.5 - 5.5
+lockdown_ratio = 0.50               # 0.25 - 0.8
+imported_scale = 1.30               # 0.5 - 2
 lockdown_period = 35                # 35, 42, 49, 56, 63, 70
 social_distancing_ratio = 0.7       # 0.5-1
 period_asymp = 10                   # 8-12
@@ -48,7 +48,8 @@ period_hosp_if_not_icu = 8          # 6-10
 period_hosp_if_icu = 8              # 6-10
 period_icu_if_recover = 10          # 8-12
 period_icu_if_die = 5               # 3-7
-mort_loading = 1                    # 0.5 - 1.5
+mort_loading = 1.0                  # 0.5 - 1.5
+prop_mild_detected = 0.6            # 0.2 - 0.8
 
 # hard-coded parameters
 infectious_func = lambda t: 1 if t < 11 else (1-(1-social_distancing_ratio)/11*(t-11)) if 11<= t < 22 else lockdown_ratio if 22 <= t < (22+lockdown_period) else social_distancing_ratio
@@ -114,15 +115,15 @@ model = MultiPopWrapper(
               '60-69': [0, 0, 1, 1, ferguson['60-69'][1], 0],
               '70-79': [0, 0, 1, 1, ferguson['70-79'][1], 0],
               '80+': [0, 0, 1, 1, ferguson['80+'][1], 0]},
-    rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3]],
-              '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3]],
-              '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3]],
-              '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3]],
-              '40-49': [0, 0, 0, 0, 0, ferguson['40-49'][3]],
-              '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3]],
-              '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3]],
-              '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3]],
-              '80+': [0, 0, 0, 0, 0, ferguson['80+'][3]]},
+    rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3] * mort_loading],
+              '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3] * mort_loading],
+              '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3] * mort_loading],
+              '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3] * mort_loading],
+              '40-49': [0, 0, 0, 0, 0, ferguson['40-49'][3] * mort_loading],
+              '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3] * mort_loading],
+              '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3] * mort_loading],
+              '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3] * mort_loading],
+              '80+': [0, 0, 0, 0, 0, ferguson['80+'][3] * mort_loading]},
     infectious_func=infectious_func,
     imported_func=imported_func,
     extend_vars=True
@@ -156,7 +157,7 @@ i_total = np.sum(i_t[:, :, 1], axis=-1)
 sev_total = np.sum(i_t[:, :, 2:], axis=(1, 2))
 h_total = np.sum(i_t[:, :, -2], axis=-1)
 icu_total = np.sum(i_t[:, :, -1], axis=-1)
-detected_total = 0.6 * np.sum(i_t[:, :, 1] + r_t[:, :, 1] + d_t[:, :, 1], axis=-1) \
+detected_total = prop_mild_detected * np.sum(i_t[:, :, 1] + r_t[:, :, 1] + d_t[:, :, 1], axis=-1) \
                 + np.sum(i_t[:, :, 2:] + r_t[:, :, 2:] + d_t[:, :, 2:], axis=(1, 2))
 r_total = np.sum(r_t, axis=(1, 2))
 d_total = np.sum(d_t, axis=(1, 2))
