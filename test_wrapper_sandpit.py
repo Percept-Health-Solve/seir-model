@@ -12,13 +12,34 @@ import datetime
 from seir.wrapper import MultiPopWrapper
 from seir.utils import plot_solution
 
-lockdown_scenarios = [21,35,49]     # orig. 21, moved to 35
-social_distancing_ratio = 0.7
+# Ferguson et al. parameterisation
+ferguson = {'0-9':[0.001,0.05,0.00002],
+            '10-19':[0.003,0.05,0.00006],
+            '20-29':[0.012,0.05,0.0003],
+            '30-39':[0.032,0.05,0.0008],
+            '40-49':[0.049,0.063,0.0015],
+            '50-59':[0.102,0.122,0.006],
+            '60-69':[0.166,0.274,0.022],
+            '70-79':[0.243,0.432,0.051],
+            '80+':[0.273,0.709,0.093]}
+
+# work out deaths as % of those entering ICU
+for key in ferguson:
+  ferguson[key].append(ferguson[key][2]/ferguson[key][1]/ferguson[key][0])
+
+asymptomatic_prop = 0.7
+r0 = 2.5
 lockdown_ratio = 0.4
 
-for scenario in range(len(lockdown_scenarios)):
+# scenarios (first parameter is length of lockdown, second is social distancing multiple of R0)
+scenarios = [[35,0.7],[49,0.7],[35,0.6],[35,0.8]]     
 
-  lockdown_period = lockdown_scenarios[scenario]
+
+
+for i,scenario in enumerate(scenarios):
+
+  lockdown_period = scenario[0]
+  social_distancing_ratio = scenario[1]
   
   infectious_func = lambda t: 1 if t < 11 else (1-(1-social_distancing_ratio)/11*(t-11)) if 11<= t < 22 else lockdown_ratio if 22 <= t < (22+lockdown_period) else social_distancing_ratio # scenario 1
   # infectious_func = lambda t: 1 if t < 22 else 0.25 if 22 <= t < 64 else 1 # scenario 2
@@ -52,15 +73,15 @@ for scenario in range(len(lockdown_scenarios)):
                       'density': ['high', 'low']
                       },
       inf_labels=['AS', 'M', 'S', 'SI', 'H', 'ICU'],
-      alpha={'0-9': [0.179, 0.821 * 0.999, 0.821 * 0.001, 0, 0, 0],
-            '10-19': [0.179, 0.821 * 0.997, 0.821 * 0.003, 0, 0, 0],
-            '20-29': [0.179, 0.821 * 0.988, 0.821 * 0.012, 0, 0, 0],
-            '30-39': [0.179, 0.821 * 0.968, 0.821 * 0.032, 0, 0, 0],
-            '40-49': [0.179, 0.821 * 0.951, 0.821 * 0.049, 0, 0, 0],
-            '50-59': [0.179, 0.821 * 0.898, 0.821 * 0.102, 0, 0, 0],
-            '60-69': [0.179, 0.821 * 0.834, 0.821 * 0.166, 0, 0, 0],
-            '70-79': [0.179, 0.821 * 0.757, 0.821 * 0.243, 0, 0, 0],
-            '80+': [0.179, 0.821 * 0.727, 0.821 * 0.273, 0, 0, 0]},
+      alpha={'0-9': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['0-9'][0]), (1-asymptomatic_prop) * ferguson['0-9'][0], 0, 0, 0],
+            '10-19': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['10-19'][0]), (1-asymptomatic_prop) * ferguson['10-19'][0], 0, 0, 0],
+            '20-29': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['20-29'][0]), (1-asymptomatic_prop) * ferguson['20-29'][0], 0, 0, 0],
+            '30-39': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['30-39'][0]), (1-asymptomatic_prop) * ferguson['30-39'][0], 0, 0, 0],
+            '40-49': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['40-49'][0]), (1-asymptomatic_prop) * ferguson['40-49'][0], 0, 0, 0],
+            '50-59': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['50-59'][0]), (1-asymptomatic_prop) * ferguson['50-59'][0], 0, 0, 0],
+            '60-69': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['60-69'][0]), (1-asymptomatic_prop) * ferguson['60-69'][0], 0, 0, 0],
+            '70-79': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['70-79'][0]), (1-asymptomatic_prop) * ferguson['70-79'][0], 0, 0, 0],
+            '80+': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['80+'][0]), (1-asymptomatic_prop) * ferguson['80+'][0], 0, 0, 0]},
       t_inc=5.1,
       q_se=[0.45, 0.9, 0.9, 0, 0, 0],
       q_ii=[
@@ -73,24 +94,24 @@ for scenario in range(len(lockdown_scenarios)):
       ],
       q_ir=[1 / 10, 1 / 2.3, 0, 0, 1 / 8, 1 / 10],
       q_id=[0, 0, 0, 0, 0, 1 / 5],
-      rho_delta={'0-9': [0, 0, 1, 1, 0.05, 0],
-                '10-19': [0, 0, 1, 1, 0.03, 0],
-                '20-29': [0, 0, 1, 1, 0.05, 0],
-                '30-39': [0, 0, 1, 1, 0.05, 0],
-                '40-49': [0, 0, 1, 1, 0.063, 0],
-                '50-59': [0, 0, 1, 1, 0.122, 0],
-                '60-69': [0, 0, 1, 1, 0.274, 0],
-                '70-79': [0, 0, 1, 1, 0.432, 0],
-                '80+': [0, 0, 1, 1, 0.709, 0]},
-      rho_beta={'0-9': [0, 0, 0, 0, 0, 0.487],
-                '10-19': [0, 0, 0, 0, 0, 0.487],
-                '20-29': [0, 0, 0, 0, 0, 0.609],
-                '30-39': [0, 0, 0, 0, 0, 0.609],
-                '40-49': [0, 0, 0, 0, 0, 0.592],
-                '50-59': [0, 0, 0, 0, 0, 0.587],
-                '60-69': [0, 0, 0, 0, 0, 0.589],
-                '70-79': [0, 0, 0, 0, 0, 0.592],
-                '80+': [0, 0, 0, 0, 0, 0.585]},
+      rho_delta={'0-9': [0, 0, 1, 1, ferguson['0-9'][1], 0],
+                '10-19': [0, 0, 1, 1, ferguson['10-19'][1], 0], 
+                '20-29': [0, 0, 1, 1, ferguson['20-29'][1], 0],
+                '30-39': [0, 0, 1, 1, ferguson['30-39'][1], 0],
+                '40-49': [0, 0, 1, 1, ferguson['40-49'][1], 0],
+                '50-59': [0, 0, 1, 1, ferguson['50-59'][1], 0],
+                '60-69': [0, 0, 1, 1, ferguson['60-69'][1], 0],
+                '70-79': [0, 0, 1, 1, ferguson['70-79'][1], 0],
+                '80+': [0, 0, 1, 1, ferguson['80+'][1], 0]},
+      rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3]],
+                '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3]],
+                '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3]],
+                '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3]],
+                '40-49': [0, 0, 0, 0, 0, ferguson['40-49'][3]],
+                '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3]],
+                '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3]],
+                '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3]],
+                '80+': [0, 0, 0, 0, 0, ferguson['80+'][3]]},
       infectious_func=infectious_func,
       imported_func=imported_func,
       extend_vars=True
@@ -165,5 +186,5 @@ for scenario in range(len(lockdown_scenarios)):
   df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total'] + df_total['R'] + df_total['Dead']
   df_total['IFR'] = df_total['Dead'] / df_total['Cumulative Infections']
   df_total['CFR'] = df_total['Dead'] / df_total['Cumulative Detected']
-  df_total.to_csv('data/daily_scenario_'+str(scenario+1)+'.csv',index=False)
+  df_total.to_csv('data/daily_scenario_'+str(i+1)+'.csv',index=False)
 

@@ -16,7 +16,14 @@ actual_hospitalisations['Date'] = [pd.to_datetime(x).date() for x in actual_hosp
 actual_deaths = pd.read_excel('../../Calibration.xlsx',sheet_name='Deaths')
 actual_deaths['Date'] = [pd.to_datetime(x).date() for x in actual_deaths['Date']]
 
-for i in range(3):
+scenario_descr = 'Scenario 1: 5 week lockdown, social distancing = 0.7 R0 post \n \
+                  Scenario 2: 7 week lockdown, social distancing = 0.7 R0 post \n \
+                  Scenario 3: 5 week lockdown, social distancing = 0.6 R0 post \n \
+                  Scenario 4: 5 week lockdown, social distancing = 0.8 R0 post'
+
+num_scenarios = 4
+
+for i in range(num_scenarios):
   df = pd.read_csv('data/daily_scenario_' + str(i+1) +'.csv')
   df['Day'] = [pd.to_datetime(x).date() for x in df['Day']]
   df['Total hospitalised'] = [a+b for a,b in zip(df['Hospitalised'],df['ICU'])]
@@ -28,7 +35,7 @@ for i in range(3):
 
 fig, axes = plt.subplots(5, 3)
 
-for i in range(3):
+for i in range(num_scenarios):
 
   axes[0, 0].plot(
       df_list[i]['Day'][:46],
@@ -170,7 +177,7 @@ for i in range(5):
                           datetime.date(2020,9,21),datetime.date(2020,11,10),datetime.date(2020,12,30)))
   axes[i, 2].set_xticklabels(('05-Mar', '24-Apr', '13-Jun', '02-Aug', '21-Sep', '10-Nov', '30-Dec'))
 
-
+fig.suptitle(scenario_descr)
 
 plt.show()
 fig.savefig('data/Scenario_result_plot.png')
