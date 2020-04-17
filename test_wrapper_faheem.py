@@ -42,7 +42,7 @@ mort_loading = 1.0                  # 0.5 - 1.5     Mortality loading relative t
 prop_mild_detected = 0.6            # 0.2 - 0.8     Proportion of mildy symptomatic cases that are tested and detected
 
 
-def get_results_from_parameters(s0,
+def get_results_from_parameters(s_0,
                                 asymptomatic_prop,
                                 asymp_rel_infectivity,
                                 asymp_prop_imported,
