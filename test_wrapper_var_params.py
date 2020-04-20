@@ -5,15 +5,63 @@ import matplotlib.pyplot as plt
 import datetime
 
 from seir.wrapper import MultiPopWrapper
-from seir.utils import plot_solution_ds
+from seir.utils import plot_solution
 
 # read calibration data
-actual_infections = pd.read_excel('../../Calibration.xlsx',sheet_name='Confirmed cases')
-actual_infections['Date'] = [pd.to_datetime(x).date() for x in actual_infections['Date']]
 actual_hospitalisations = pd.read_excel('../../Calibration.xlsx',sheet_name='Hospitalisations')
-actual_hospitalisations['Date'] = [pd.to_datetime(x).date() for x in actual_hospitalisations['Date']]
-actual_deaths = pd.read_excel('../../Calibration.xlsx',sheet_name='Deaths')
-actual_deaths['Date'] = [pd.to_datetime(x).date() for x in actual_deaths['Date']]
+actual_hospitalisations['Date'] = [pd.to_datetime(x,).date() for x in actual_hospitalisations['Date']]
+
+actual_infections = pd.read_csv('https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_confirmed.csv')
+actual_infections.rename(columns={'date':'Date','total':'Cum. Confirmed'},inplace=True)
+actual_infections.index = pd.to_datetime(actual_infections['Date'],dayfirst=True)
+actual_infections = actual_infections.resample('D',how='mean').ffill().reset_index()
+actual_infections['Date'] = [pd.to_datetime(x,dayfirst=True).date() for x in actual_infections['Date']]
+
+reported_deaths = pd.read_csv('https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_timeline_deaths.csv')
+reported_deaths.rename(columns={'date':'Date'},inplace=True)
+reported_deaths['Date'] = [pd.to_datetime(x,dayfirst=True).date() for x in reported_deaths['Date']]
+actual_deaths = reported_deaths.groupby('Date').report_id.count().reset_index()
+actual_deaths.rename(columns={'report_id':'Daily deaths'},inplace=True)
+actual_deaths.index = pd.to_datetime(actual_deaths['Date'])
+actual_deaths = actual_deaths.resample('D',how='mean').fillna(0).reset_index()
+actual_deaths['Cum. Deaths'] = np.cumsum(actual_deaths['Daily deaths'])
+
+
+# variable parameters for front-end
+asymptomatic_prop = 0.4             # 0.2-0.8
+asymp_rel_infectivity = 0.4         # 0.3 - 1
+asymp_prop_imported = 0.0           # 0 - 0.8
+r0 = 2.5                            # 1.5 - 5.5
+lockdown_ratio = 0.50               # 0.25 - 0.8
+imported_scale = 1.3                # 0.5 - 2
+lockdown_period = 35                # 35, 42, 49, 56, 63, 70
+social_distancing_ratio = 0.7       # 0.5-1
+period_asymp = 10                   # 8-12
+period_mild_infect = 2.3            # 2-4
+period_severe_infect = 2.3          # 2-4
+period_severe_isolate = 6 - period_severe_infect
+period_hosp_if_not_icu = 8          # 6-10
+period_hosp_if_icu = 8              # 6-10
+period_icu_if_recover = 10          # 8-12 
+period_icu_if_die = 5               # 3-7
+mort_loading = 1.0                  # 0.5 - 1.5
+prop_mild_detected = 0.6            # 0.2 - 0.8
+hosp_to_icu = 0.2133                # 0.1 - 0.4 (0.21330242 = Ferguson)
+
+descr = 'asymp_'+str(asymptomatic_prop)+'_R0_'+str(r0)+'_imported_scale_'+str(imported_scale)+'_lockdown_'+str(lockdown_ratio)+'_postlockdown_'+str(social_distancing_ratio)+'_ICU_'+str(hosp_to_icu)+'_mort_'+str(mort_loading)+'_asympinf_'+str(asymp_rel_infectivity)
+full_descr = f'Baseline R0: {r0:.1f}, asymptomatic proportion: {asymptomatic_prop:.0%}, asymptomatic relative infectiousness {asymp_rel_infectivity:.0%}, {prop_mild_detected:.0%} of mild cases detected \n'
+full_descr += f'Imported scaling factor {imported_scale:.2f}, asymptomatic proportion imported {asymp_prop_imported:.0%} \n'
+full_descr += f'Lockdown period: {lockdown_period:,.0f}, R0 relative to baseline {lockdown_ratio:.0%} in lockdown, {social_distancing_ratio:.0%} post-lockdown \n'
+full_descr += f'Infectious days pre-isolation: {period_asymp} asymptomatic, {period_mild_infect} mild, {period_severe_infect} severe; severe isolation days pre-hospitalisation: {period_severe_isolate} \n'
+full_descr += f'Hospital days: {period_hosp_if_not_icu} not critical, {period_hosp_if_icu} critical plus {period_icu_if_recover} in ICU if recover/{period_icu_if_die} if die \n'
+full_descr += f'Proportion of hospitalised cases ending in ICU: {hosp_to_icu:.2%}, mortality loading {mort_loading:.0%}'
+
+# get s0 from file:
+df = pd.read_csv('data/Startpop_2density_0comorbidity.csv') #, index_col=0)
+df['density'] = df['density'].map({'High': 'high', 'Low': 'low'})
+df['label'] = df['age'].str.lower() + '_' + df['sex'].str.lower() + '_' + df['density'].str.lower()
+df_dict = df[['label', 'Population']].to_dict()
+s_0 = {df_dict['label'][i]: df_dict['Population'][i] for i in df_dict['label'].keys()}
 
 # Ferguson et al. parameterisation
 ferguson = {'0-9':[0.001,0.05,0.00002],
@@ -30,28 +78,21 @@ ferguson = {'0-9':[0.001,0.05,0.00002],
 for key in ferguson:
   ferguson[key].append(ferguson[key][2]/ferguson[key][1]/ferguson[key][0])
 
-# variable parameters for front-end
-descr = '4a_R0_3.5_imported_scale_1.4_lockdown_0.5'
-asymptomatic_prop = 0.7             # 0.2-0.8
-asymp_rel_infectivity = 0.4         # 0.3 - 1
-asymp_prop_imported = 0.0           # 0 - 0.8
-r0 = 3.5                            # 1.5 - 5.5
-lockdown_ratio = 0.50               # 0.25 - 0.8
-imported_scale = 1.30               # 0.5 - 2
-lockdown_period = 35                # 35, 42, 49, 56, 63, 70
-social_distancing_ratio = 0.7       # 0.5-1
-period_asymp = 10                   # 8-12
-period_mild_infect = 2.3            # 2-4
-period_severe_infect = 2.3          # 2-4
-period_severe_isolate = 6 - period_severe_infect
-period_hosp_if_not_icu = 8          # 6-10
-period_hosp_if_icu = 8              # 6-10
-period_icu_if_recover = 10          # 8-12
-period_icu_if_die = 5               # 3-7
-mort_loading = 1.0                  # 0.5 - 1.5
-prop_mild_detected = 0.6            # 0.2 - 0.8
 
+# age profile - calculate ICU transition adjustment
+age_profile = df.groupby('age').Population.sum().reset_index()
+ferguson_df = pd.DataFrame(ferguson).T.reset_index()
+ferguson_df.rename(columns={'index':'age',0:'symp_to_hosp',1:'hosp_to_icu',2:'symp_to_dead',3:'icu_to_dead'},inplace=True)
+age_profile['Proportion'] = age_profile['Population'] / age_profile['Population'].sum()
+age_profile = age_profile.merge(ferguson_df[['age','symp_to_hosp','hosp_to_icu']],on='age')
+age_profile['hosp'] = age_profile['Proportion'] * age_profile['symp_to_hosp']
+age_profile['prop_hosp'] = age_profile['hosp'] / age_profile['hosp'].sum()
+age_profile['overall_hosp_to_icu'] = age_profile['prop_hosp'] * age_profile['hosp_to_icu']
+overall_hosp_to_icu = age_profile['overall_hosp_to_icu'].sum()
+icu_adjustment = hosp_to_icu / overall_hosp_to_icu
+ 
 # hard-coded parameters
+
 infectious_func = lambda t: 1 if t < 11 else (1-(1-social_distancing_ratio)/11*(t-11)) if 11<= t < 22 else lockdown_ratio if 22 <= t < (22+lockdown_period) else social_distancing_ratio
 c = 1
 s = 0.0         # proportion of imported cases below 60 that are severe (1-s are mild); assume 100% 60+ are severe
@@ -85,7 +126,7 @@ model = MultiPopWrapper(
                     'density': ['high', 'low']
                     },
     inf_labels=['AS', 'M', 'S', 'SI', 'H', 'ICU'],
-    alpha={'0-9': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['0-9'][0]), (1-asymptomatic_prop) * ferguson['0-9'][0], 0, 0, 0],
+    alpha={'0-9':  [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['0-9'][0]),   (1-asymptomatic_prop) * ferguson['0-9'][0],   0, 0, 0],
           '10-19': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['10-19'][0]), (1-asymptomatic_prop) * ferguson['10-19'][0], 0, 0, 0],
           '20-29': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['20-29'][0]), (1-asymptomatic_prop) * ferguson['20-29'][0], 0, 0, 0],
           '30-39': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['30-39'][0]), (1-asymptomatic_prop) * ferguson['30-39'][0], 0, 0, 0],
@@ -93,29 +134,29 @@ model = MultiPopWrapper(
           '50-59': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['50-59'][0]), (1-asymptomatic_prop) * ferguson['50-59'][0], 0, 0, 0],
           '60-69': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['60-69'][0]), (1-asymptomatic_prop) * ferguson['60-69'][0], 0, 0, 0],
           '70-79': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['70-79'][0]), (1-asymptomatic_prop) * ferguson['70-79'][0], 0, 0, 0],
-          '80+': [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['80+'][0]), (1-asymptomatic_prop) * ferguson['80+'][0], 0, 0, 0]},
+          '80+':   [asymptomatic_prop, (1-asymptomatic_prop) * (1-ferguson['80+'][0]),   (1-asymptomatic_prop) * ferguson['80+'][0],   0, 0, 0]},
     t_inc=5.1,
     q_se=[asymp_rel_infectivity, 1, 1, 0, 0, 0],
     q_ii=[
         [0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [0, 0, 1 / period_severe_infect, 0, 0, 0],
-        [0, 0, -1 / period_severe_infect, 1 / period_severe_isolate, 0, 0],   # changed hospital LOS to 8 days after 
-        [0, 0, 0, -1 / period_severe_isolate, 1 / period_hosp_if_icu, 0],     # discussion with Barry 14/4/20
+        [0, 0, -1 / period_severe_infect, 1 / period_severe_isolate, 0, 0],  
+        [0, 0, 0, -1 / period_severe_isolate, 1 / period_hosp_if_icu, 0],     
         [0, 0, 0, 0, -1 / period_hosp_if_icu, 0]
     ],
     q_ir=[1 / period_asymp, 1 / period_mild_infect, 0, 0, 1 / period_hosp_if_not_icu, 1 / period_icu_if_recover],
     q_id=[0, 0, 0, 0, 0, 1 / period_icu_if_die],
-    rho_delta={'0-9': [0, 0, 1, 1, ferguson['0-9'][1], 0],
-              '10-19': [0, 0, 1, 1, ferguson['10-19'][1], 0], 
-              '20-29': [0, 0, 1, 1, ferguson['20-29'][1], 0],
-              '30-39': [0, 0, 1, 1, ferguson['30-39'][1], 0],
-              '40-49': [0, 0, 1, 1, ferguson['40-49'][1], 0],
-              '50-59': [0, 0, 1, 1, ferguson['50-59'][1], 0],
-              '60-69': [0, 0, 1, 1, ferguson['60-69'][1], 0],
-              '70-79': [0, 0, 1, 1, ferguson['70-79'][1], 0],
-              '80+': [0, 0, 1, 1, ferguson['80+'][1], 0]},
-    rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3] * mort_loading],
+    rho_delta={'0-9':  [0, 0, 1, 1, ferguson['0-9'][1]   * icu_adjustment, 0],
+              '10-19': [0, 0, 1, 1, ferguson['10-19'][1] * icu_adjustment, 0], 
+              '20-29': [0, 0, 1, 1, ferguson['20-29'][1] * icu_adjustment, 0],
+              '30-39': [0, 0, 1, 1, ferguson['30-39'][1] * icu_adjustment, 0],
+              '40-49': [0, 0, 1, 1, ferguson['40-49'][1] * icu_adjustment, 0],
+              '50-59': [0, 0, 1, 1, ferguson['50-59'][1] * icu_adjustment, 0],
+              '60-69': [0, 0, 1, 1, ferguson['60-69'][1] * icu_adjustment, 0],
+              '70-79': [0, 0, 1, 1, ferguson['70-79'][1] * icu_adjustment, 0],
+              '80+':   [0, 0, 1, 1, ferguson['80+'][1]   * icu_adjustment, 0]},
+    rho_beta={'0-9':   [0, 0, 0, 0, 0, ferguson['0-9'][3]   * mort_loading],
               '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3] * mort_loading],
               '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3] * mort_loading],
               '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3] * mort_loading],
@@ -123,18 +164,11 @@ model = MultiPopWrapper(
               '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3] * mort_loading],
               '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3] * mort_loading],
               '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3] * mort_loading],
-              '80+': [0, 0, 0, 0, 0, ferguson['80+'][3] * mort_loading]},
+              '80+':   [0, 0, 0, 0, 0, ferguson['80+'][3]   * mort_loading]},
     infectious_func=infectious_func,
     imported_func=imported_func,
     extend_vars=True
 )
-
-# get s0 from file:
-df = pd.read_csv('data/Startpop_2density_0comorbidity.csv') #, index_col=0)
-df['density'] = df['density'].map({'High': 'high', 'Low': 'low'})
-df['label'] = df['age'].str.lower() + '_' + df['sex'].str.lower() + '_' + df['density'].str.lower()
-df_dict = df[['label', 'Population']].to_dict()
-s_0 = {df_dict['label'][i]: df_dict['Population'][i] for i in df_dict['label'].keys()}
 
 init_vectors = {
     's_0': s_0,
@@ -145,7 +179,7 @@ periods_per_day = 5
 t = np.linspace(0, 300, 300 * periods_per_day + 1)
 solution = model.solve(init_vectors, t, to_csv=False, fp=None)
 model.q_se = model.q_se * r0 / model.r_0
-solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution_ds.csv')
+solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
 
 print(model.r_0)
 
@@ -175,8 +209,18 @@ df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] 
 df_total['IFR'] = df_total['Dead'] / df_total['Cumulative Infections']
 df_total['CFR'] = df_total['Dead'] / df_total['Cumulative Detected']
 df_total['Total hospitalised'] = [a+b for a,b in zip(df_total['Hospitalised'],df_total['ICU'])]
-df_total.to_csv('data/daily_output.csv',index=False)
+df_total['Active infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total']
+df_total.to_csv('data/daily_output_'+descr+'.csv',index=False)
 
 # plot output
-fig, axes = plot_solution_ds(df_total,actual_infections,actual_hospitalisations,actual_deaths,45,90)
+fig, axes = plot_solution(df_total,full_descr,actual_infections,actual_hospitalisations,actual_deaths,45,90)
 fig.savefig('data/output_'+descr+'.png')
+
+
+plt.stackplot(
+    np.asarray(df_total['Day']),
+    np.asarray(df_total['Active infections']),np.asarray(df_total['S']),np.asarray(df_total['E']),
+    np.asarray(df_total['R']),np.asarray(df_total['Dead']),
+    labels=['I','S','E','R','D'],
+    colors=['red','lightgray','blue','green','black']
+)
