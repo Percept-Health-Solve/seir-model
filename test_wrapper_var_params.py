@@ -32,23 +32,23 @@ actual_deaths['Cum. Deaths'] = np.cumsum(actual_deaths['Daily deaths'])
 
 # variable parameters for front-end
 asymptomatic_prop = 0.75  # 0.2-0.8
-asymp_rel_infectivity = 0.75  # 0.3 - 1
+asymp_rel_infectivity = 0.5  # 0.3 - 1
 asymp_prop_imported = 0.0  # 0 - 0.8
 r0 = 3.0  # 1.5 - 5.5
-lockdown_ratio = 0.65  # 0.25 - 0.8
-imported_scale = 1.7  # 0.5 - 2
+lockdown_ratio = 0.7  # 0.25 - 0.8
+imported_scale = 2.5  # 0.5 - 2
 lockdown_period = 35  # 35, 42, 49, 56, 63, 70
 social_distancing_ratio = 0.8  # 0.5-1
 period_asymp = 10  # 8-12
 period_mild_infect = 7.0  # 2-4
 period_severe_infect = 2.3  # 2-4
 period_severe_isolate = 6 - period_severe_infect
-period_hosp_if_not_icu = 8  # 6-10
-period_hosp_if_icu = 8  # 6-10
+period_hosp_if_not_icu = 10  # 6-10
+period_hosp_if_icu = 6  # 6-10
 period_icu_if_recover = 10  # 8-12
-period_icu_if_die = 10  # 3-7
+period_icu_if_die = 6  # 3-7
 mort_loading = 1.0  # 0.5 - 1.5
-prop_mild_detected = 0.6  # 0.2 - 0.8
+prop_mild_detected = 0.3  # 0.2 - 0.8
 hosp_to_icu = 0.2133  # 0.1 - 0.4 (0.21330242 = Ferguson)
 
 descr = 'asymp_' + str(asymptomatic_prop) + '_R0_' + str(r0) + '_imported_scale_' + str(
@@ -106,7 +106,11 @@ infectious_func = lambda t: 1 if t < 11 else (
             1 - (1 - social_distancing_ratio) / 11 * (t - 11)) if 11 <= t < 22 else lockdown_ratio if 22 <= t < (
             22 + lockdown_period) else social_distancing_ratio
 c = 1
-s = 0.06  # proportion of imported cases below 60 that are severe (1-s are mild); assume 100% 60+ are severe
+s = 0.06  # proportion of imported cases below 60 that are severe (1-s are mild)
+# scale of ferguson ratio for 60+ - setting to inverse value from ferguson means we assume 100% of cases 60+ are severe
+scale = {'60-69': 1,
+         '70-79': 1/ferguson['70-79'][0],
+         '80+': 1/ferguson['80+'][0]}
 a = 0.25
 l = asymp_prop_imported / (1 - asymp_prop_imported)
 x = c * imported_scale
@@ -121,11 +125,11 @@ imported_func = lambda t: {'0-9_male_high': [0.0101 * x * l * np.exp(a * t), 0.0
                                                0.1768 * x * s * np.exp(a * t), 0, 0, 0],
                            '40-49_male_high': [0.0960 * x * l * np.exp(a * t), 0.0960 * x * (1 - s) * np.exp(a * t),
                                                0.0960 * x * s * np.exp(a * t), 0, 0, 0],
-                           '50-59_male_high': [0.1717 * x * l * np.exp(a * t), 0.1717 * x * (1 - s) * np.exp(a * t),
-                                               0.1717 * x * s * np.exp(a * t), 0, 0, 0],
-                           '60-69_male_high': [0.0758 * x * l * np.exp(a * t), 0, 0.0758 * x * np.exp(a * t), 0, 0, 0],
-                           '70-79_male_high': [0.0202 * x * l * np.exp(a * t), 0, 0.0202 * x * np.exp(a * t), 0, 0, 0],
-                           '80+_male_high': [0.0051 * x * l * np.exp(a * t), 0, 0.0051 * x * np.exp(a * t), 0, 0, 0],
+                           '50-59_male_high': [0.1717 * x * l * np.exp(a * t), 0.1717 * x * (1 - ferguson['50-59'][0]) * np.exp(a * t),
+                                               0.1717 * x * ferguson['50-59'][0] * np.exp(a * t), 0, 0, 0],
+                           '60-69_male_high': [0.0758 * x * l * np.exp(a * t), 0.0758 * x * (1 - scale['60-69'] * ferguson['60-69'][0]) * np.exp(a * t), 0.0758 * x * scale['60-69'] * ferguson['60-69'][0] * np.exp(a * t), 0, 0, 0],
+                           '70-79_male_high': [0.0202 * x * l * np.exp(a * t), 0.0202 * x * (1 - scale['70-79'] * ferguson['70-79'][0]) * np.exp(a * t), 0.0202 * x * scale['70-79'] * ferguson['70-79'][0] * np.exp(a * t), 0, 0, 0],
+                           '80+_male_high': [0.0051 * x * l * np.exp(a * t), 0.0051 * x * (1 - scale['80+'] * ferguson['80+'][0]) * np.exp(a * t), 0.0051 * x * scale['80+'] * ferguson['80+'][0] * np.exp(a * t), 0, 0, 0],
                            '0-9_female_high': [0.0000 * x * l * np.exp(a * t), 0.0000 * x * (1 - s) * np.exp(a * t),
                                                0.0000 * x * s * np.exp(a * t), 0, 0, 0],
                            '10-19_female_high': [0.0101 * x * l * np.exp(a * t), 0.0101 * x * (1 - s) * np.exp(a * t),
@@ -138,11 +142,11 @@ imported_func = lambda t: {'0-9_male_high': [0.0101 * x * l * np.exp(a * t), 0.0
                                                  0.0556 * x * s * np.exp(a * t), 0, 0, 0],
                            '50-59_female_high': [0.0657 * x * l * np.exp(a * t), 0.0657 * x * (1 - s) * np.exp(a * t),
                                                  0.0657 * x * s * np.exp(a * t), 0, 0, 0],
-                           '60-69_female_high': [0.0152 * x * l * np.exp(a * t), 0, 0.0152 * x * np.exp(a * t), 0, 0,
+                           '60-69_female_high': [0.0152 * x * l * np.exp(a * t), 0.0152 * x * (1 - scale['60-69'] * ferguson['60-69'][0]) * np.exp(a * t), 0.0152 * x * scale['60-69'] * ferguson['60-69'][0] * np.exp(a * t), 0, 0,
                                                  0],
-                           '70-79_female_high': [0.0303 * x * l * np.exp(a * t), 0, 0.0303 * x * np.exp(a * t), 0, 0,
+                           '70-79_female_high': [0.0303 * x * l * np.exp(a * t), 0.0303 * x * (1 - scale['70-79'] * ferguson['70-79'][0]) * np.exp(a * t), 0.0303 * x * scale['70-79'] * ferguson['70-79'][0] * np.exp(a * t), 0, 0,
                                                  0],
-                           '80+_female_high': [0.0000 * x * l * np.exp(a * t), 0, 0.0000 * x * np.exp(a * t), 0, 0, 0]
+                           '80+_female_high': [0.0000 * x * l * np.exp(a * t), 0.0000 * x * (1 - scale['80+'] * ferguson['80+'][0]) * np.exp(a * t), 0.0000 * x * scale['80+'] * ferguson['80+'][0] * np.exp(a * t), 0, 0, 0]
                            } if t < 22 else 0
 
 model = MultiPopWrapper(
@@ -213,9 +217,11 @@ periods_per_day = 5
 t = np.linspace(0, 300, 300 * periods_per_day + 1)
 solution = model.solve(init_vectors, t, to_csv=False, fp=None)
 model.q_se = model.q_se * r0 / model.r_0  # TODO: Fix R_0 hack (build init params to accept r0 and relative infectivity)
+print(model.q_se)
 solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
 
 print(model.r_0)
+print(model.r_0_eff)
 
 s_t, e_t, i_t, r_t, d_t = solution
 s_total = np.sum(s_t, axis=-1)
