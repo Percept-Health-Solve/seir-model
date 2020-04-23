@@ -22,8 +22,8 @@ class NInfectiousModel:
                  q_ii,
                  q_ir,
                  q_id,
-                 delta,
-                 beta,
+                 rho_delta,
+                 rho_beta,
                  infectious_func=None,
                  imported_func=None,
                  extend_vars=True):
@@ -66,12 +66,12 @@ class NInfectiousModel:
             The transition from the I states to the R states for each population group. Can only have shape
             (nb_infectious,) if extend_vars is True.
 
-        delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The proportion of I states undergoing transitions from one I state to another I state for each population
-            group. Conversely, 1 - delta represents the proportion of the population that are transitioning to the
+            group. Conversely, 1 - rho_delta represents the proportion of the population that are transitioning to the
             removed states R and D. Can only have shape (nb_infectious,) if extend_vars is True.
 
-        beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The mortality rate of the I states undergoing a transition from I to D. Can only have shape (nb_infectious,)
             if extend_vars is True.
 
@@ -93,15 +93,15 @@ class NInfectiousModel:
         q_ii = np.asarray(q_ii)
         q_ir = np.asarray(q_ir)
         q_id = np.asarray(q_id)
-        beta = np.asarray(beta)
-        delta = np.asarray(delta)
+        rho_beta = np.asarray(rho_beta)
+        rho_delta = np.asarray(rho_delta)
 
         if nb_groups == 1:
             q_ii = np.reshape(1, *q_ii.shape) if q_ii.ndim == 2 else q_ii
             q_ir = np.reshape(1, *q_ir.shape) if q_ir.ndim == 1 else q_ir
             q_id = np.reshape(1, *q_id.shape) if q_id.ndim == 1 else q_id
-            beta = np.reshape(1, *beta.shape) if beta.ndim == 1 else beta
-            delta = np.reshape(1, *delta.shape) if delta.ndim == 1 else delta
+            rho_beta = np.reshape(1, *rho_beta.shape) if rho_beta.ndim == 1 else rho_beta
+            rho_delta = np.reshape(1, *rho_delta.shape) if rho_delta.ndim == 1 else rho_delta
             alpha = np.reshape(1, *alpha.shape) if alpha.ndim == 1 else alpha
 
         if extend_vars is True:
@@ -109,14 +109,14 @@ class NInfectiousModel:
             q_ii = np.broadcast_to(q_ii, (nb_groups, nb_infectious, nb_infectious)) if q_ii.ndim == 2 else q_ii
             q_ir = np.broadcast_to(q_ir, (nb_groups, nb_infectious)) if q_ir.ndim == 1 else q_ir
             q_id = np.broadcast_to(q_id, (nb_groups, nb_infectious)) if q_id.ndim == 1 else q_id
-            delta = np.broadcast_to(delta, (nb_groups, nb_infectious)) if delta.ndim == 1 else delta
-            beta = np.broadcast_to(beta, (nb_groups, nb_infectious)) if beta.ndim == 1 else beta
+            rho_delta = np.broadcast_to(rho_delta, (nb_groups, nb_infectious)) if rho_delta.ndim == 1 else rho_delta
+            rho_beta = np.broadcast_to(rho_beta, (nb_groups, nb_infectious)) if rho_beta.ndim == 1 else rho_beta
 
         # assert variables
         assert nb_groups > 0
         assert nb_infectious > 0
         assert t_inc > 0
-        _assert_vectors(nb_groups, nb_infectious, [alpha, q_ir, q_id, beta, delta])
+        _assert_vectors(nb_groups, nb_infectious, [alpha, q_ir, q_id, rho_beta, rho_delta])
         assert q_se.ndim == 1
         assert q_se.shape[0] == nb_infectious
         assert q_ii.ndim == 3
@@ -124,8 +124,8 @@ class NInfectiousModel:
         assert q_ii.shape[1] == q_ii.shape[2] == nb_infectious
 
         # ensure variables maintain constraints
-        assert np.all(np.sum(alpha, axis=1) == 1)
-        assert np.all(np.sum(q_ii, axis=1) == 0)
+        assert np.all(np.abs(np.sum(alpha, axis=1) - 1) <= 1E-15)
+        assert np.all(np.abs(np.sum(q_ii, axis=1)) <= 1E-15)
 
         # check infectious func
         if infectious_func is not None:
@@ -139,6 +139,28 @@ class NInfectiousModel:
         else:
             imported_func = lambda x: 0
 
+        # rho_beta goes through a function before being used in the ode
+        beta = np.array([
+            rho_beta[g] * q_ir[g]
+            / (rho_beta[g] * q_ir[g] + (1 - rho_beta[g]) * q_id[g] + 1E-20)
+            for g in range(nb_groups)
+        ])
+        # in the case where element i of q_ir[g]_i is zero and rho_beta[g]_i is one, the result should be 1
+        fix_args = np.argwhere((rho_beta == 1) & (q_ir == 0))
+        for arg in fix_args:
+            beta[arg[0], arg[1]] = 1
+
+        # rho_delta goes through a function before being used in the ode:
+        delta = np.array([
+            rho_delta[g] * (q_ir[g] * (1 - beta[g]) + q_id[g] * beta[g])
+            / (np.diag(q_ii[g]) * (1 - rho_delta[g]) + (q_ir[g] * (1 - beta[g]) + q_id[g] * beta[g]) * rho_delta[g] + 1E-20)
+            for g in range(nb_groups)
+        ])
+        # in the case where element i of q_ir[g]_i and q_id[g] is zero and rho_delta[g]_i is one, the result should be 1
+        fix_args = np.argwhere((rho_delta == 1) & ((q_ir * (1 - beta) + q_id * beta) == 0))
+        for arg in fix_args:
+            delta[arg[0], arg[1]] = 1
+
         # set public properties
         self.nb_groups = nb_groups
         self.nb_infectious = nb_infectious
@@ -148,7 +170,9 @@ class NInfectiousModel:
         self.q_ii = q_ii
         self.q_ir = q_ir
         self.q_id = q_id
+        self.rho_beta = rho_beta
         self.beta = beta
+        self.rho_delta = rho_delta
         self.delta = delta
         self.infectious_func = infectious_func
         self.imported_func = imported_func
@@ -195,7 +219,8 @@ class NInfectiousModel:
                     np.diag(self.q_ii[g]) * self.delta[g]
                     + self.q_ir[g] * (1 - self.beta[g]) * (1 - self.delta[g])
                     + self.q_id[g] * self.beta[g] * (1 - self.delta[g])
-            ) for g in range(self.nb_groups)
+                    + 1E-20
+            ) * (self.N_g[g] > 0) for g in range(self.nb_groups)
         ]
         return np.array(out)
 
@@ -206,17 +231,20 @@ class NInfectiousModel:
         return out
 
     def ode(self, y, t, N):
+        # find indices for various vectors in flat vector
         idx_s = self.y_idx_dict['s']
         idx_e = self.y_idx_dict['e']
         idx_i = self.y_idx_dict['i']
         # idx_r = self.y_idx_dict['r']
 
+        # assign quantities from flat vector y based on indices
         s = y[:idx_s].reshape(self.nb_groups, 1)
         e = y[idx_s:idx_e].reshape(self.nb_groups, 1)
         i = y[idx_e:idx_i].reshape(self.nb_groups, self.nb_infectious)
         # r = y[idx_i:idx_r].reshape(self.nb_groups, self.nb_infectious)
         # d = y[idx_r:].reshape(self.nb_groups, self.nb_infectious)
 
+        # define ode
         dsdt = - 1 / N * (self.infectious_func(t) * self.q_se).dot(np.sum(i, axis=0)) * s
         dedt = 1 / N * (self.infectious_func(t) * self.q_se).dot(np.sum(i, axis=0)) * s - e / self.t_inc
         didt = self.alpha * e / self.t_inc \
@@ -227,6 +255,7 @@ class NInfectiousModel:
         drdt = self.q_ir * (1 - self.delta) * (1 - self.beta) * i
         dddt = self.q_id * (1 - self.delta) * self.beta * i
 
+        # reshape ode back to flat vector
         dydt = np.concatenate([
             dsdt.reshape(-1),
             dedt.reshape(-1),

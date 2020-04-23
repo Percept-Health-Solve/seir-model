@@ -16,8 +16,8 @@ class MultiPopWrapper(NInfectiousModel):
                  q_ii,
                  q_ir,
                  q_id,
-                 delta,
-                 beta,
+                 rho_delta,
+                 rho_beta,
                  infectious_func=None,
                  imported_func=None,
                  extend_vars:bool = False):
@@ -63,12 +63,12 @@ class MultiPopWrapper(NInfectiousModel):
             The transition from the I states to the R states for each population group. Can only have shape
             (nb_infectious,) if extend_vars is True.
 
-        delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_delta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The proportion of I states undergoing transitions from one I state to another I state for each population
-            group. Conversely, 1 - delta represents the proportion of the population that are transitioning to the
+            group. Conversely, 1 - rho represents the proportion of the population that are transitioning to the
             removed states R and D. Can only have shape (nb_infectious,) if extend_vars is True.
 
-        beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
+        rho_beta: [nb_group X nb_infectious] or [nb_infectious X 1] array
             The mortality rate of the I states undergoing a transition from I to D. Can only have shape (nb_infectious,)
             if extend_vars is True.
 
@@ -102,50 +102,84 @@ class MultiPopWrapper(NInfectiousModel):
             nb_groups *= len(pop_categories[key])
         cat_list_product = itertools.product(*pop_cat_list)
 
-        # find nb_infectious
-        nb_infectious = len(inf_labels)
+        self.nb_groups = nb_groups
+        self.nb_infectious = len(inf_labels)
 
         self.pop_categories = pop_categories
         self.pop_labels = ['_'.join(x) for x in cat_list_product]
         self.inf_labels = inf_labels.copy()
-        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(nb_groups)}
-        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(nb_groups)}
-        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(nb_infectious)}
-        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(nb_infectious)}
+        self.pop_label_to_idx = {self.pop_labels[i]: i for i in range(self.nb_groups)}
+        self.idx_to_pop_label = {i: self.pop_labels[i] for i in range(self.nb_groups)}
+        self.inf_label_to_idx = {self.inf_labels[i]: i for i in range(self.nb_infectious)}
+        self.idx_to_inf_label = {i: self.inf_labels[i] for i in range(self.nb_infectious)}
 
-        if isinstance(delta, dict):
-            d = np.zeros((nb_groups, nb_infectious))
-            for key in delta:
-                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
-                for pop_idx in pop_idx_match:
-                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
-                    d[i] = np.asarray(delta[key])
-            delta = d
+        # parse dict/vectors correctly
+        alpha = self._parse_dict_or_vector_input(alpha)
+        rho_delta = self._parse_dict_or_vector_input(rho_delta)
+        rho_beta = self._parse_dict_or_vector_input(rho_beta)
 
-        if isinstance(beta, dict):
-            b = np.zeros((nb_groups, nb_infectious))
-            for key in beta:
-                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
-                for pop_idx in pop_idx_match:
-                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
-                    b[i] = np.asarray(beta[key])
-            beta = b
+        # parse dict functions correctly
+        imported_func = self._parse_dict_or_func(imported_func)
 
         super(MultiPopWrapper, self).__init__(
-            nb_groups,
-            nb_infectious,
+            self.nb_groups,
+            self.nb_infectious,
             t_inc,
             alpha,
             q_se,
             q_ii,
             q_ir,
             q_id,
-            delta,
-            beta,
+            rho_delta,
+            rho_beta,
             infectious_func,
             imported_func,
             extend_vars
         )
+
+    def _parse_dict_or_vector_input(self, input):
+        assert isinstance(input, list) or isinstance(input, np.ndarray) or isinstance(input, dict), \
+            f"Input {input} is not array-like or a dictionary."
+        if isinstance(input, dict):
+            # check dictionary values
+            for key in input:
+                assert isinstance(input[key], list) or isinstance(input[key], np.ndarray), \
+                    f"Input key {key} contains a non-array-like structure {input[key]}."
+                assert len(input[key]) == self.nb_infectious, \
+                    f"Input key {key} with value {input[key]} is not of length {self.nb_infectious}."
+            # create output
+            temp = np.zeros((self.nb_groups, self.nb_infectious))
+            for key in input:
+                pop_idx_match = np.argwhere([key in x for x in self.pop_labels]).reshape(-1)
+                if len(pop_idx_match) == 0:
+                    raise ValueError(f'Given key {key} not found in population categories.')
+                for pop_idx in pop_idx_match:
+                    i = self.pop_label_to_idx[self.pop_labels[pop_idx]]
+                    temp[i] = np.asarray(input[key])
+            out = temp
+            return out
+        return np.asarray(input)
+
+    def _parse_dict_or_func(self, input):
+        if input is None:
+            return lambda t: np.zeros((self.nb_groups, self.nb_infectious))
+        assert callable(input), \
+            "Input parameter is not callable."
+
+        def wrapped_func(t):
+            if isinstance(input(t), dict):
+                out = np.zeros((self.nb_groups, self.nb_infectious))
+                func_dict = input(t)
+                for key in func_dict:
+                    idx = self.pop_label_to_idx[key]
+                    out[idx] = np.asarray(func_dict[key])
+                return out
+            else:
+                return input(t)
+
+        return wrapped_func
+
+
 
     def _to_csv(self, solution, t, fp):
         pop_label = lambda i: self.idx_to_pop_label[i]
@@ -177,6 +211,7 @@ class MultiPopWrapper(NInfectiousModel):
 
     def _parse_pop_vector(self, dict_vector, states='single'):
         # TODO: Fix coding structure here
+        # TODO: Add exception for case when dictionary contains invalid keys
         assert states in ['single', 'multi']
         if isinstance(dict_vector, dict):
             default = 0 if states == 'single' else [0] * self.nb_infectious
