@@ -24,6 +24,7 @@ class NInfectiousModel:
                  q_id,
                  rho_delta,
                  rho_beta,
+                 init_vectors,
                  infectious_func=None,
                  imported_func=None,
                  extend_vars=True):
@@ -161,6 +162,30 @@ class NInfectiousModel:
         for arg in fix_args:
             delta[arg[0], arg[1]] = 1
 
+        s_0, e_0, i_0, r_0, d_0 = self._parse_init_vectors(init_vectors)
+
+        assert s_0.shape == (self.nb_groups,) or s_0.shape == (self.nb_groups, 1)
+        assert e_0.shape == (self.nb_groups,) or e_0.shape == (self.nb_groups, 1)
+        if self.nb_groups > 1:
+            assert i_0.shape == (self.nb_groups, self.nb_infectious)
+            assert r_0.shape == (self.nb_groups, self.nb_infectious)
+            assert d_0.shape == (self.nb_groups, self.nb_infectious)
+        elif self.nb_groups == 1:
+            assert i_0.shape == (self.nb_infectious,)
+            assert r_0.shape == (self.nb_infectious,)
+            assert d_0.shape == (self.nb_infectious,)
+
+        y_0 = np.concatenate([
+            s_0.reshape(-1),
+            e_0.reshape(-1),
+            i_0.reshape(-1),
+            r_0.reshape(-1),
+            d_0.reshape(-1)
+        ])
+
+        N = np.sum(y_0)
+        N_g = s_0.reshape(self.nb_groups) + e_0.reshape(self.nb_groups) + np.sum(i_0 + r_0 + d_0, axis=1)
+
         # set public properties
         self.nb_groups = nb_groups
         self.nb_infectious = nb_infectious
@@ -176,34 +201,19 @@ class NInfectiousModel:
         self.delta = delta
         self.infectious_func = infectious_func
         self.imported_func = imported_func
+        self.N = N
+        self.N_g = N_g
+        self.y_0 = y_0
 
         # set private properties
         self._solved = False
         self._solution = None
-        self._N = 0
-        self._N_g = 0
         self.y_idx_dict = {
             's': self.nb_groups,
             'e': self.nb_groups * 2,
             'i': self.nb_groups * 2 + self.nb_groups * self.nb_infectious,
             'r': self.nb_groups * 2 + self.nb_groups * self.nb_infectious * 2
         }
-
-    @property
-    def N(self):
-        # TODO: Add ability to solve N given some initial vectors
-        if self._solved:
-            return self._N
-        else:
-            raise ValueError('Attempted to return N when model has not been solved!')
-
-    @property
-    def N_g(self):
-        # TODO: Add ability to solve N_g given some initial vectors
-        if self._solved:
-            return self._N_g
-        else:
-            raise ValueError('Attempted to return N_g when model has not been solved!')
 
     @property
     def solution(self):
@@ -230,12 +240,14 @@ class NInfectiousModel:
         out = 1 / self.N * np.sum([self.N_g[g] * self.alpha[g].dot(r_0_eff[g]) for g in range(self.nb_groups)])
         return out
 
-    def ode(self, y, t, N):
+    def ode(self, y, t):
         # find indices for various vectors in flat vector
         idx_s = self.y_idx_dict['s']
         idx_e = self.y_idx_dict['e']
         idx_i = self.y_idx_dict['i']
         # idx_r = self.y_idx_dict['r']
+
+        N = self.N
 
         # assign quantities from flat vector y based on indices
         s = y[:idx_s].reshape(self.nb_groups, 1)
@@ -266,7 +278,7 @@ class NInfectiousModel:
 
         return dydt
 
-    def solve(self, init_vectors: dict, t, to_csv: bool = False, fp: str = None) -> tuple:
+    def solve(self, t, to_csv: bool = False, fp: str = None) -> tuple:
         """Solve the SEIR equations for this model.
 
         Params
@@ -311,31 +323,7 @@ class NInfectiousModel:
         if not to_csv and fp is not None:
             raise Warning('File path given but to_csv = False')
 
-        s_0, e_0, i_0, r_0, d_0 = self._parse_init_vectors(init_vectors)
-
-        assert s_0.shape == (self.nb_groups,) or s_0.shape == (self.nb_groups, 1)
-        assert e_0.shape == (self.nb_groups,) or e_0.shape == (self.nb_groups, 1)
-        if self.nb_groups > 1:
-            assert i_0.shape == (self.nb_groups, self.nb_infectious)
-            assert r_0.shape == (self.nb_groups, self.nb_infectious)
-            assert d_0.shape == (self.nb_groups, self.nb_infectious)
-        elif self.nb_groups == 1:
-            assert i_0.shape == (self.nb_infectious,)
-            assert r_0.shape == (self.nb_infectious,)
-            assert d_0.shape == (self.nb_infectious,)
-
-        y_0 = np.concatenate([
-            s_0.reshape(-1),
-            e_0.reshape(-1),
-            i_0.reshape(-1),
-            r_0.reshape(-1),
-            d_0.reshape(-1)
-        ])
-
-        N = np.sum(y_0)
-        N_g = s_0.reshape(self.nb_groups) + e_0.reshape(self.nb_groups) + np.sum(i_0 + r_0 + d_0, axis=1)
-
-        solution = odeint(self.ode, y_0, t, args=(N,))
+        solution = odeint(self.ode, self.y_0, t)
 
         if to_csv:
             self._to_csv(solution, t, fp)
@@ -352,8 +340,6 @@ class NInfectiousModel:
         r_t = r_t.reshape(-1, self.nb_groups, self.nb_infectious)
         d_t = d_t.reshape(-1, self.nb_groups, self.nb_infectious)
 
-        self._N = N
-        self._N_g = N_g
         self._solved = True
         self._solution = (s_t, e_t, i_t, r_t, d_t)
 

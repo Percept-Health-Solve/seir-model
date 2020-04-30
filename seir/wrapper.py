@@ -18,6 +18,7 @@ class MultiPopWrapper(NInfectiousModel):
                  q_id,
                  rho_delta,
                  rho_beta,
+                 init_vectors,
                  infectious_func=None,
                  imported_func=None,
                  extend_vars:bool = False):
@@ -132,6 +133,7 @@ class MultiPopWrapper(NInfectiousModel):
             q_id,
             rho_delta,
             rho_beta,
+            init_vectors,
             infectious_func,
             imported_func,
             extend_vars
