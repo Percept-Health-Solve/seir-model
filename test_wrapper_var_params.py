@@ -34,17 +34,17 @@ actual_deaths['Cum. Deaths'] = np.cumsum(actual_deaths['Daily deaths'])
 asymptomatic_prop = 0.75  # 0.2-0.8
 asymp_rel_infectivity = 0.5  # 0.3 - 1
 asymp_prop_imported = 0.0  # 0 - 0.8
-r0 = 3.0  # 1.5 - 5.5
-lockdown_ratio = 0.7  # 0.25 - 0.8
+r0 = 2.6  # 1.5 - 5.5
+lockdown_ratio = 0.6  # 0.25 - 0.8
 imported_scale = 2.5  # 0.5 - 2
 lockdown_period = 35  # 35, 42, 49, 56, 63, 70
-social_distancing_ratio = 0.8  # 0.5-1
-period_asymp = 10  # 8-12
-period_mild_infect = 7.0  # 2-4
+social_distancing_ratio = 0.75  # 0.5-1
+period_asymp = 2.3  # 8-12
+period_mild_infect = 2.3  # 2-4
 period_severe_infect = 2.3  # 2-4
 period_severe_isolate = 6 - period_severe_infect
 period_hosp_if_not_icu = 10  # 6-10
-period_hosp_if_icu = 6  # 6-10
+period_hosp_if_icu = 8  # 6-10
 period_icu_if_recover = 10  # 8-12
 period_icu_if_die = 6  # 3-7
 mort_loading = 1.0  # 0.5 - 1.5
@@ -149,6 +149,11 @@ imported_func = lambda t: {'0-9_male_high': [0.0101 * x * l * np.exp(a * t), 0.0
                            '80+_female_high': [0.0000 * x * l * np.exp(a * t), 0.0000 * x * (1 - scale['80+'] * ferguson['80+'][0]) * np.exp(a * t), 0.0000 * x * scale['80+'] * ferguson['80+'][0] * np.exp(a * t), 0, 0, 0]
                            } if t < 22 else 0
 
+init_vectors = {
+    's_0': s_0,
+    'i_0': {'30-39_male_high': [0, 0, 0, 0, 0, 0]}
+}
+
 model = MultiPopWrapper(
     pop_categories={'age': ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
                     'sex': ['male', 'female'],
@@ -205,23 +210,15 @@ model = MultiPopWrapper(
               '80+': [0, 0, 0, 0, 0, ferguson['80+'][3] * mort_loading]},
     infectious_func=infectious_func,
     imported_func=imported_func,
+    init_vectors=init_vectors,
     extend_vars=True
 )
 
-init_vectors = {
-    's_0': s_0,
-    'i_0': {'30-39_male_high': [0, 0, 0, 0, 0, 0]}
-}
-
 periods_per_day = 5
 t = np.linspace(0, 300, 300 * periods_per_day + 1)
-solution = model.solve(init_vectors, t, to_csv=False, fp=None)
-model.q_se = model.q_se * r0 / model.r_0  # TODO: Fix R_0 hack (build init params to accept r0 and relative infectivity)
+model.q_se = model.q_se * r0 / model.r_0
 print(model.q_se)
-solution = model.solve(init_vectors, t, to_csv=True, fp='data/solution.csv')
-
-print(model.r_0)
-print(model.r_0_eff)
+solution = model.solve(t, to_csv=True, fp='data/solution.csv')
 
 s_t, e_t, i_t, r_t, d_t = solution
 s_total = np.sum(s_t, axis=-1)
