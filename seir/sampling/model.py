@@ -133,6 +133,10 @@ class SamplingNInfectiousModel:
         self._t = None
         self.solution = None
 
+        self.resample_vars = None
+        self.log_weights = None
+        self.weights = None
+
     def _ode(self, y, t):
         # get seird
         s, e, i_as, i_m, i_s, i_i, i_h, i_icu, _, _, _, _, _ = self._get_seird_from_flat_y(y)
@@ -194,17 +198,17 @@ class SamplingNInfectiousModel:
             else:
                 return self.solution
 
-    def sir_posterior(self,
-                      t,
-                      i_d_obs=None,
-                      i_h_obs=None,
-                      i_icu_obs=None,
-                      d_icu_obs=None,
-                      ratio_as_detected=0.,
-                      ratio_m_detected=0.3,
-                      ratio_s_detected=1.0,
-                      ratio_resample: int = 0.1,
-                      y0=None) -> dict:
+    def calculate_sir_posterior(self,
+                                t,
+                                i_d_obs=None,
+                                i_h_obs=None,
+                                i_icu_obs=None,
+                                d_icu_obs=None,
+                                ratio_as_detected=0.,
+                                ratio_m_detected=0.3,
+                                ratio_s_detected=1.0,
+                                ratio_resample: float = 0.1,
+                                y0=None) -> dict:
         # cast variables
         t = np.asarray(t)
         i_d_obs = None if i_d_obs is None else np.asarray(i_d_obs).reshape(-1, 1, 1).astype(int)
@@ -242,10 +246,10 @@ class SamplingNInfectiousModel:
 
 
         # model detected cases as poisson distribution y~P(lambda=detected_cases) with stirling's approximation for log y!
-        log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, cum_detected_samples)
-        log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, i_h)
-        log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, i_icu)
-        log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, d_icu)
+        log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, np.round(cum_detected_samples))
+        log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, np.round(i_h))
+        log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, np.round(i_icu))
+        log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, np.round(d_icu))
 
         # calculate the log weights
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
@@ -262,7 +266,9 @@ class SamplingNInfectiousModel:
             resample_vars[key] = value[np.random.choice(value.shape[0], m, p=weights)]
         logging.info(f'Succesfully resampled {list(resample_vars.keys())} {m} times from {self.nb_samples} original samples')
 
-        return resample_vars
+        self.resample_vars = resample_vars
+        self.log_weights = log_weights
+        self.weights = weights
 
     def _get_seird_from_flat_y(self, y):
         y = y.reshape(self.nb_samples, self.nb_groups, 13)
