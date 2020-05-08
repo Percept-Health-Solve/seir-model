@@ -1,3 +1,5 @@
+# NB: You have to run main_sampling.py in order for this script to function
+
 import numpy as np
 import pandas as pd
 import pickle
@@ -100,7 +102,7 @@ if __name__ == '__main__':
     d_icu_obs = df_merge['WC_deaths']
 
     logging.info('Solving model')
-    # have to do this nonsense to prevent segmentation faults
+    # have to do this nonsense fiesta to prevent segmentation faults
     tt = np.arange(t0, 10+1)
     y = model.solve(tt)
     ttt = np.arange(10, 150+1)
