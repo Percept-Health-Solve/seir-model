@@ -139,7 +139,7 @@ class SamplingNInfectiousModel:
 
     def _ode(self, y, t):
         # get seird
-        s, e, i_as, i_m, i_s, i_i, i_h, i_icu, _, _, _, _, _ = self._get_seird_from_flat_y(y)
+        s, e, i_as, i_m, i_s, i_i, i_h, i_icu, r_as, r_m, r_h, r_icu, d_icu = self._get_seird_from_flat_y(y)
 
         # get meta vars
         inf_s_prop = 1 - self.inf_as_prop - self.inf_m_prop
@@ -199,7 +199,8 @@ class SamplingNInfectiousModel:
                 return self.solution
 
     def calculate_sir_posterior(self,
-                                t,
+                                t_solve,
+                                t_calib,
                                 i_d_obs=None,
                                 i_h_obs=None,
                                 i_icu_obs=None,
@@ -208,9 +209,12 @@ class SamplingNInfectiousModel:
                                 ratio_m_detected=0.3,
                                 ratio_s_detected=1.0,
                                 ratio_resample: float = 0.1,
-                                y0=None) -> dict:
+                                y0=None,
+                                scale=1) -> dict:
         # cast variables
-        t = np.asarray(t)
+        t_solve = np.asarray(t_solve)
+        t_calib = np.asarray(t_calib)
+        t_select = t_calib - t_calib.min()
         i_d_obs = None if i_d_obs is None else np.asarray(i_d_obs).reshape(-1, 1, 1).astype(int)
         i_h_obs = None if i_h_obs is None else np.asarray(i_h_obs).reshape(-1, 1, 1).astype(int)
         i_icu_obs = None if i_icu_obs is None else np.asarray(i_icu_obs).reshape(-1, 1, 1).astype(int)
@@ -226,30 +230,30 @@ class SamplingNInfectiousModel:
         # assert d_icu_obs.ndim == 1 and d_icu_obs.size == t.size, "Observed deaths does not match time size"
 
         logging.info('Solving system')
-        y = self.solve(t, y0)
+        y = self.solve(t_solve, y0)
 
         logging.info('Collecting necessary variables')
-        i_as = y[:, :, :, 2]
-        i_m = y[:, :, :, 3]
-        i_s = y[:, :, :, 4]
-        i_i = y[:, :, :, 5]
-        i_h = y[:, :, :, 6]
-        i_icu = y[:, :, :, 7]
-        r_as = y[:, :, :, 8]
-        r_m = y[:, :, :, 9]
-        r_h = y[:, :, :, 10]
-        r_icu = y[:, :, :, 11]
-        d_icu = y[:, :, :, 12]
+        i_as = y[t_select, :, :, 2]
+        i_m = y[t_select, :, :, 3]
+        i_s = y[t_select, :, :, 4]
+        i_i = y[t_select, :, :, 5]
+        i_h = y[t_select, :, :, 6]
+        i_icu = y[t_select, :, :, 7]
+        r_as = y[t_select, :, :, 8]
+        r_m = y[t_select, :, :, 9]
+        r_h = y[t_select, :, :, 10]
+        r_icu = y[t_select, :, :, 11]
+        d_icu = y[t_select, :, :, 12]
 
         cum_detected_samples = ratio_as_detected * (i_as + r_as) + ratio_m_detected * (i_m + r_m) \
                                + ratio_s_detected * (i_s + i_i + i_h + i_icu + r_h + r_icu + d_icu)
 
 
         # model detected cases as poisson distribution y~P(lambda=detected_cases) with stirling's approximation for log y!
-        log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, np.round(cum_detected_samples))
-        log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, np.round(i_h))
-        log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, np.round(i_icu))
-        log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, np.round(d_icu))
+        log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, cum_detected_samples,scale)
+        log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, i_h, scale)
+        log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, i_icu, scale)
+        log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, d_icu, scale)
 
         # calculate the log weights
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
@@ -358,7 +362,7 @@ _log_k_factorial = np.vectorize(_log_k_factorial)
 _log_l = np.vectorize(_log_l)
 
 
-def _log_poisson(k, l):
-    out = k * _log_l(l) - l - gammaln(k+1)
+def _log_poisson(k, l, scale):
+    out = k * _log_l(l) - l - gammaln(k+1) + np.log(scale)
     out = np.sum(out, axis=(0, 2))
     return out
