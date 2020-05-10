@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats as st
 import pandas as pd
 
+import datetime
 import pickle
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,7 @@ from seir.sampling.model import SamplingNInfectiousModel
 import logging
 logging.basicConfig(level=logging.INFO)
 
+calibrate_to_weekly = True
 
 def check_priors_plot(model):
     tt = np.arange(t0, 50).astype(int)
@@ -88,148 +90,173 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
     with open(f'{base}_group.pkl', 'wb') as f:
         pickle.dump(group_vars, f)
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
 
-    nb_groups = 1
-    nb_samples = 100 #100000
+nb_groups = 1
+nb_samples = 2 #100000
 
-    r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
-    time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
-    e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
-    y0 = np.zeros((nb_samples, nb_groups, 13))
-    y0[:, :, 0] = 7000000 - e0
-    y0[:, :, 1] = e0
-    y0 = y0.reshape(-1)
-    # y0 = [7000000-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    t0 = -50
+r0 = np.random.normal(2.75, 0.5, size=(nb_samples, 1))    # from U(2,3.5)
+time_infectious = np.random.uniform(1.5, 6, size=(nb_samples, 1)) # changed upper limit from 4
+e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
+y0 = np.zeros((nb_samples, nb_groups, 13))
+y0[:, :, 0] = 7000000 - e0
+y0[:, :, 1] = e0
+y0 = y0.reshape(-1)
+# y0 = [7000000-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+t0 = -50
 
-    inf_as_prop = np.random.uniform(0.1, 0.9, size=(nb_samples, 1))
+inf_as_prop = np.random.uniform(0.25, 0.85, size=(nb_samples, 1))    # from 0.1 to 0.9
 
-    model = SamplingNInfectiousModel(
-        nb_groups=nb_groups,
-        baseline_beta=r0/time_infectious,
-        rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
-        rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
-        rel_beta_as=np.random.uniform(0.3, 0.7, size=(nb_samples, 1)),
-        time_inc=5.1,
-        inf_as_prop=inf_as_prop,
-        inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
-        time_infectious=time_infectious,
-        time_s_to_h=6,
-        time_h_to_icu=8,
-        time_h_to_r=10,
-        time_icu_to_r=10,
-        time_icu_to_d=6,
-        hosp_icu_prop=0.2133,
-        icu_d_prop=0.6,
-        y0=y0
-    )
+model = SamplingNInfectiousModel(
+    nb_groups=nb_groups,
+    baseline_beta=r0/time_infectious,
+    rel_lockdown_beta=np.random.uniform(0.25, 1, size=(nb_samples, 1)),   # changed from (0,1)
+    rel_postlockdown_beta=np.random.uniform(0.6, 1, size=(nb_samples, 1)),# changed from (0.7, 0.8)
+    rel_beta_as=np.random.uniform(0.4, 1, size=(nb_samples, 1)),          # changed from (0.3, 0.7)
+    time_inc=5.1,
+    inf_as_prop=inf_as_prop,
+    inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
+    time_infectious=time_infectious,
+    time_s_to_h=6,
+    time_h_to_icu=8,
+    time_h_to_r=10,
+    time_icu_to_r=10,
+    time_icu_to_d=6,
+    hosp_icu_prop=np.random.normal(0.2133,0.05,size=(nb_samples, 1)),
+    icu_d_prop=np.random.normal(0.6,0.1,size=(nb_samples, 1)),
+    y0=y0
+)
 
-    # get data
-    df_deaths = pd.read_csv(
-        'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv',
-        parse_dates=['date'],
-        date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
-    )
-    df_confirmed = pd.read_csv(
-        'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_confirmed.csv',
-        parse_dates=['date'],
-        date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
-    )
-    df_hosp_icu = pd.read_csv('data/WC_hosp_icu.csv',
-                              parse_dates=['Date'],
-                              date_parser=lambda t: pd.to_datetime(t, format='%d/%m/%Y'))
+# get data
+df_deaths = pd.read_csv(
+    'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv',
+    parse_dates=['date'],
+    date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
+)
+df_confirmed = pd.read_csv(
+    'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_confirmed.csv',
+    parse_dates=['date'],
+    date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
+)
+df_hosp_icu = pd.read_csv('data/WC_hosp_icu.csv',
+                          parse_dates=['Date'],
+                          date_parser=lambda t: pd.to_datetime(t, format='%Y-%m-%d'))     #'%d/%m/%Y'))
 
-    df_deaths = df_deaths.sort_values('date')
-    df_confirmed = df_confirmed.sort_values('date')
-    df_hosp_icu = df_hosp_icu.sort_values('Date')
+min_date = df_confirmed['date'].min()
+max_date = np.min([df_confirmed['date'].max(),df_deaths['date'].max(),df_hosp_icu['Date'].max()])  # calibrating only up to point where we haev data for all
+timespan = divmod((max_date - min_date).days, 1)[0] + 1
+date_range = pd.DataFrame({'date':[min_date + datetime.timedelta(days=x) for x in range(timespan)]})
 
-    df_deaths = df_deaths[['date', 'WC']]
-    df_confirmed = df_confirmed[['date', 'WC']]
+df_deaths = df_deaths.sort_values('date')
+df_confirmed = df_confirmed.sort_values('date')
+df_hosp_icu = df_hosp_icu.sort_values('Date')
 
-    df_confirmed = df_confirmed.interpolate(method='linear')
+df_deaths = df_deaths[['date', 'WC']]
+df_confirmed = df_confirmed[['date', 'WC']]
 
-    df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
-    df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
-    df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
+df_confirmed = date_range.merge(df_confirmed,how='left').reset_index()
+df_confirmed['WC'] = df_confirmed['WC'].interpolate(method='pad')  # changed from 'linear'
 
-    df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
-    df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
-    df_merge = df_merge.interpolate(method='linear')
-    df_merge = df_merge[['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
-    df_merge = df_merge.fillna(0)
+df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
+df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
+df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
 
-    df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
-    df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
-    df_merge['Day'] = df_merge['Day'].astype(int)
+df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
+df_merge['WC_deaths'] = df_merge['WC_deaths'].interpolate(method='linear')
+df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
+df_merge['Hospital_excl_ICU'] = df_merge['Hospital_excl_ICU'].interpolate(method='linear')
+df_merge['ICU'] = df_merge['ICU'].interpolate(method='linear')
+df_merge = df_merge[['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Hospital_excl_ICU', 'ICU', 'Day']]
+df_merge = df_merge.fillna(0)
 
-    # remove small observations
-    df_merge = df_merge[df_merge['WC_confirmed'] > 500]
-    df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
-    df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 20]
+df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
+df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
+df_merge['Hospital_excl_ICU'] = df_merge['Hospital_excl_ICU'].astype(int)
+df_merge['ICU'] = df_merge['ICU'].astype(int)
+df_merge['Day'] = df_merge['Day'].astype(int)
 
-    t = df_merge['Day'].to_numpy()
-    i_h_obs = df_merge['Current hospitalisations']
-    i_icu_obs = df_merge['Current ICU']
-    i_d_obs = df_merge['WC_confirmed']
-    d_icu_obs = df_merge['WC_deaths']
+# remove small observations
+#df_merge = df_merge[df_merge['WC_confirmed'] > 500]
+#df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
+#df_merge = df_merge[df_merge['Current ICU'] > 20]
+df_merge = df_merge[df_merge['WC_deaths'] > 5]  #20  # others too restrictive, and drop interim values when ICU dips
 
-    # get y_t.min() from y0
-    logging.info('Solving for y at minimum data time')
-    tt = np.arange(t0, t.min()+1).astype(int)
-    y_tmin = model.solve(tt)[-1]
-    y_tmin = y_tmin.reshape(-1)
+if calibrate_to_weekly:
+  weeks = int((df_merge['Day'].max() - df_merge['Day'].min())/7)
+  days = [df_merge['Day'].max() + x for x in range(-7*weeks,1,7)]
+  df_merge = df_merge[df_merge['Day'].isin(days)]
 
-    # check if priors match the data
-    # check_priors_plot(model)
+t = df_merge['Day'].to_numpy()
+i_h_obs = df_merge['Hospital_excl_ICU']
+i_icu_obs = df_merge['ICU']
+i_d_obs = df_merge['WC_confirmed']
+d_icu_obs = df_merge['WC_deaths']
+t_obs = df_merge['Day']
 
-    # fit to data
+# get y_t.min() from y0
+logging.info('Solving for y at minimum data time')
+tt = np.arange(t0, t.min()+1).astype(int)
+y_tmin = model.solve(tt)[-1]
+y_tmin = y_tmin.reshape(-1)
 
-    ratio_as_detected = 0
-    ratio_m_detected = 0.3
-    ratio_s_detected = 1
-    ratio_resample = 0.05
+# check if priors match the data
+# check_priors_plot(model)
 
-    model.calculate_sir_posterior(t, i_d_obs, i_h_obs + i_icu_obs, None, d_icu_obs, y0=y_tmin,
-                                  ratio_as_detected=ratio_as_detected,
-                                  ratio_m_detected=ratio_m_detected,
-                                  ratio_s_detected=ratio_s_detected,
-                                  ratio_resample=ratio_resample)
+# fit to data
 
-    sample_vars = model.sample_vars
-    resample_vars = model.resample_vars
-    scalar_vars = model.scalar_vars
-    group_vars = model.group_vars
+ratio_as_detected = 0
+ratio_m_detected = 0.3
+ratio_s_detected = 1
+ratio_resample = 0.1  # 0.05
 
-    e0_resample = e0[np.random.choice(nb_samples, int(ratio_resample*nb_samples), p=model.weights)]
+t_solve = list(range(t.min(),t.max()+1))
+model.calculate_sir_posterior(t_solve = t_solve,
+                              t_calib = t,
+                              i_d_obs = None,    # moved i_d_obs out of calibration
+                              i_h_obs = i_h_obs + i_icu_obs, 
+                              i_icu_obs = None, 
+                              d_icu_obs = d_icu_obs, 
+                              y0=y_tmin, 
+                              ratio_as_detected=ratio_as_detected,
+                              ratio_m_detected=ratio_m_detected,
+                              ratio_s_detected=ratio_s_detected,
+                              ratio_resample=ratio_resample,
+                              scale=1000)
 
-    # add e0 and t0 manually
-    # TODO: Let the model accept initial parameters as potential random variables
-    scalar_vars['t0'] = t0
-    sample_vars['e0'] = e0
-    sample_vars['r0'] = r0
-    resample_vars['e0'] = e0_resample
-    resample_vars['r0'] = resample_vars['time_infectious'] * resample_vars['baseline_beta']
+sample_vars = model.sample_vars
+resample_vars = model.resample_vars
+scalar_vars = model.scalar_vars
+group_vars = model.group_vars
 
-    # save variables
-    save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))
+e0_resample = e0[np.random.choice(nb_samples, int(ratio_resample*nb_samples), p=model.weights)]
+print(sum(model.weights<1e-20))
 
-    logging.info('Plotting prior and posterior distributions')
-    fig, axes = plt.subplots(2, 5, figsize=(16, 8))
-    i = 0
-    axes = axes.flat
-    for key, value in resample_vars.items():
-        # TODO: plot variables for multiple groups
-        print(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
-        sns.kdeplot(value[:, 0], ax=axes[i], color='C0')
-        sns.kdeplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
-        axes[i].set_title(key)
-        i += 1
+# add e0 and t0 manually
+# TODO: Let the model accept initial parameters as potential random variables
+scalar_vars['t0'] = t0
+sample_vars['e0'] = e0
+sample_vars['r0'] = r0
+resample_vars['e0'] = e0_resample
+resample_vars['r0'] = resample_vars['time_infectious'] * resample_vars['baseline_beta']
 
-    plt.tight_layout()
-    fig.savefig('data/priors_posterior.png')
-    plt.show()
+# save variables
+save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))
+
+logging.info('Plotting prior and posterior distributions')
+fig, axes = plt.subplots(2, 5, figsize=(16, 8))
+i = 0
+axes = axes.flat
+for key, value in resample_vars.items():
+    # TODO: plot variables for multiple groups
+    print(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
+    sns.kdeplot(value[:, 0], ax=axes[i], color='C0')
+    sns.kdeplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
+    axes[i].set_title(key)
+    i += 1
+
+plt.tight_layout()
+fig.savefig('data/priors_posterior.png')
+plt.show()
 
 
 
