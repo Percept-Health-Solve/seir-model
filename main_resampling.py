@@ -103,15 +103,23 @@ if __name__ == '__main__':
 
     logging.info('Solving model')
     # have to do this nonsense fiesta to prevent segmentation faults
-    tt = np.arange(t0, 10+1)
-    y = model.solve(tt)
-    ttt = np.arange(10, 150+1)
-    yy = model.solve(ttt, y0=y[-1].reshape(-1))
-    tttt = np.arange(150, 300)
-    yyy = model.solve(tttt, y0=yy[-1].reshape(-1))
+    t_skip = 10
+    ys = []
+    ts = []
+    y = None
+    for t_start in range(t0, 300-t_skip, t_skip):
+        tt = np.arange(t_start, t_start + t_skip+1)
+        logging.info(f'Solving in range {tt}')
+        if y is None:
+            y = model.solve(tt, y0=y0)
+        else:
+            y = model.solve(tt, y0=y[-1].reshape(-1))
+        ts.append(tt[:-1])
+        ys.append(y[:-1])
 
-    tt = np.concatenate([tt[:-1], ttt[:-1], tttt])
-    y = np.concatenate([y[:-1], yy[:-1], yyy])
+    tt = np.concatenate(ts)
+    y = np.concatenate(ys)
+    print(tt)
 
     i_as = y[:, :, :, 2]
     i_m = y[:, :, :, 3]
@@ -184,5 +192,4 @@ if __name__ == '__main__':
     df_stats.insert(0, 'Date', tt_date)
     print(df_stats.head())
     df_stats.to_csv('data/sampling_prediction.csv', index=False)
-
 

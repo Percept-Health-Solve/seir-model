@@ -91,7 +91,7 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
 if __name__ == '__main__':
 
     nb_groups = 1
-    nb_samples = 100000
+    nb_samples = 500000
 
     r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
     time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
@@ -103,14 +103,14 @@ if __name__ == '__main__':
     # y0 = [7000000-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     t0 = -50
 
-    inf_as_prop = np.random.uniform(0.1, 0.9, size=(nb_samples, 1))
+    inf_as_prop = np.random.uniform(0.7, 0.9, size=(nb_samples, 1))
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
         baseline_beta=r0/time_infectious,
         rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
         rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
-        rel_beta_as=np.random.uniform(0.3, 0.7, size=(nb_samples, 1)),
+        rel_beta_as=np.random.uniform(0.6, 0.9, size=(nb_samples, 1)),
         time_inc=5.1,
         inf_as_prop=inf_as_prop,
         inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
