@@ -75,8 +75,6 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
     for key, value in resample_vars.items():
         reshaped_resample_vars[key] = value.reshape(-1)
     reshaped_resample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
-    for key, value in reshaped_resample_vars.items():
-        print(key, value.shape)
 
     # define df
     df_resample = pd.DataFrame(reshaped_resample_vars)
@@ -91,10 +89,10 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
 if __name__ == '__main__':
 
     nb_groups = 1
-    nb_samples = 500000
+    nb_samples = 2000000
 
     r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
-    time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
+    time_infectious = np.random.uniform(1.5, 3.5, size=(nb_samples, 1))
     e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
     y0 = np.zeros((nb_samples, nb_groups, 13))
     y0[:, :, 0] = 7000000 - e0
@@ -116,10 +114,10 @@ if __name__ == '__main__':
         inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
         time_infectious=time_infectious,
         time_s_to_h=6,
-        time_h_to_icu=8,
+        time_h_to_icu=np.random.uniform(6, 10, size=(nb_samples, 1)),
         time_h_to_r=10,
         time_icu_to_r=10,
-        time_icu_to_d=6,
+        time_icu_to_d=np.random.uniform(4, 8, size=(nb_samples, 1)),
         hosp_icu_prop=0.2133,
         icu_d_prop=0.6,
         y0=y0
@@ -167,7 +165,7 @@ if __name__ == '__main__':
     df_merge = df_merge[df_merge['WC_confirmed'] > 500]
     df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
     df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 20]
+    df_merge = df_merge[df_merge['WC_deaths'] > 5]
 
     t = df_merge['Day'].to_numpy()
     i_h_obs = df_merge['Current hospitalisations']
@@ -189,9 +187,9 @@ if __name__ == '__main__':
     ratio_as_detected = 0
     ratio_m_detected = 0.3
     ratio_s_detected = 1
-    ratio_resample = 0.05
+    ratio_resample = 0.01
 
-    model.calculate_sir_posterior(t, i_d_obs, i_h_obs + i_icu_obs, None, d_icu_obs, y0=y_tmin,
+    model.calculate_sir_posterior(t, i_d_obs, i_h_obs+i_h_obs, None, d_icu_obs, y0=y_tmin,
                                   ratio_as_detected=ratio_as_detected,
                                   ratio_m_detected=ratio_m_detected,
                                   ratio_s_detected=ratio_s_detected,
@@ -216,7 +214,7 @@ if __name__ == '__main__':
     save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))
 
     logging.info('Plotting prior and posterior distributions')
-    fig, axes = plt.subplots(2, 5, figsize=(16, 8))
+    fig, axes = plt.subplots(3, 5, figsize=(11, 7))
     i = 0
     axes = axes.flat
     for key, value in resample_vars.items():
