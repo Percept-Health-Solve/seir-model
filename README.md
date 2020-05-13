@@ -1,3 +1,3 @@
 # seir-model
  
-Covid 19 Modelling
+Covid 19 Modelling. 
