@@ -2,7 +2,7 @@ import numpy as np
 import itertools
 
 r0 = [1.5,2,2.25,2.5,2.75,3,3.25,3.5,4] 
-time_infectious = [1.5,2.25,3,4,6]
+time_infectious = [1.5,2.5,3,4]
 e0 = [0.5,1,2,3,4,5]
 inf_as_prop = [0.2,0.4,0.5,0.6,0.7,0.8]
 rel_lockdown_beta = [0.25,0.4,0.5,0.6,0.8]
