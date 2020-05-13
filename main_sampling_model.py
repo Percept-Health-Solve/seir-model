@@ -75,8 +75,6 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
     for key, value in resample_vars.items():
         reshaped_resample_vars[key] = value.reshape(-1)
     reshaped_resample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
-    for key, value in reshaped_resample_vars.items():
-        print(key, value.shape)
 
     # define df
     df_resample = pd.DataFrame(reshaped_resample_vars)
@@ -91,7 +89,8 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
 if __name__ == '__main__':
 
     nb_groups = 1
-    nb_samples = 100000
+    nb_samples = 1000000
+    ratio_resample = 0.02
 
     r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
     time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
@@ -103,20 +102,20 @@ if __name__ == '__main__':
     # y0 = [7000000-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     t0 = -50
 
-    inf_as_prop = np.random.uniform(0.1, 0.9, size=(nb_samples, 1))
+    inf_as_prop = np.random.uniform(0.7, 0.9, size=(nb_samples, 1))
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
         baseline_beta=r0/time_infectious,
         rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
         rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
-        rel_beta_as=np.random.uniform(0.3, 0.7, size=(nb_samples, 1)),
+        rel_beta_as=np.random.uniform(0.6, 0.9, size=(nb_samples, 1)),
         time_inc=5.1,
         inf_as_prop=inf_as_prop,
         inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
         time_infectious=time_infectious,
         time_s_to_h=6,
-        time_h_to_icu=8,
+        time_h_to_icu=10,
         time_h_to_r=10,
         time_icu_to_r=10,
         time_icu_to_d=6,
@@ -126,6 +125,7 @@ if __name__ == '__main__':
     )
 
     # get data
+    logging.info('Loading data')
     df_deaths = pd.read_csv(
         'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv',
         parse_dates=['date'],
@@ -144,30 +144,41 @@ if __name__ == '__main__':
     df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('Date')
 
+    logging.info('Taking intersection of dates in all dataframes')
+    max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['Date'].max()])
+    logging.info(f'Maximum date at which all data sources had data: {max_date}')
+    df_confirmed = df_confirmed[df_confirmed['date'] < max_date]
+
     df_deaths = df_deaths[['date', 'WC']]
     df_confirmed = df_confirmed[['date', 'WC']]
 
+    logging.info('Linearly interpolating missing data')
     df_confirmed = df_confirmed.interpolate(method='linear')
 
+    logging.info('Setting date of lockdown 2020-03-27 to day 0')
     df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
 
+    logging.info('Merging data sources')
     df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
     df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
     df_merge = df_merge.interpolate(method='linear')
     df_merge = df_merge[['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
     df_merge = df_merge.fillna(0)
 
+    logging.info('Casting data')
     df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
     df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
     df_merge['Day'] = df_merge['Day'].astype(int)
 
     # remove small observations
-    df_merge = df_merge[df_merge['WC_confirmed'] > 500]
-    df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
-    df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 20]
+    logging.info('Filtering out data that contains small counts (as not to bias the poisson model)')
+    # df_merge = df_merge[df_merge['WC_confirmed'] > 500]
+    # df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
+    # df_merge = df_merge[df_merge['Current ICU'] > 20]
+    df_merge = df_merge[df_merge['WC_deaths'] > 5]
+    logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
 
     t = df_merge['Day'].to_numpy()
     i_h_obs = df_merge['Current hospitalisations']
@@ -177,7 +188,7 @@ if __name__ == '__main__':
 
     # get y_t.min() from y0
     logging.info('Solving for y at minimum data time')
-    tt = np.arange(t0, t.min()+1).astype(int)
+    tt = np.linspace(t0, t.min(), 20)
     y_tmin = model.solve(tt)[-1]
     y_tmin = y_tmin.reshape(-1)
 
@@ -189,13 +200,13 @@ if __name__ == '__main__':
     ratio_as_detected = 0
     ratio_m_detected = 0.3
     ratio_s_detected = 1
-    ratio_resample = 0.05
 
-    model.calculate_sir_posterior(t, i_d_obs, i_h_obs + i_icu_obs, None, d_icu_obs, y0=y_tmin,
+    model.calculate_sir_posterior(t, None, i_h_obs+i_h_obs, None, d_icu_obs, y0=y_tmin,
                                   ratio_as_detected=ratio_as_detected,
                                   ratio_m_detected=ratio_m_detected,
                                   ratio_s_detected=ratio_s_detected,
-                                  ratio_resample=ratio_resample)
+                                  ratio_resample=ratio_resample,
+                                  smoothing=1.5)
 
     sample_vars = model.sample_vars
     resample_vars = model.resample_vars
@@ -216,14 +227,14 @@ if __name__ == '__main__':
     save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))
 
     logging.info('Plotting prior and posterior distributions')
-    fig, axes = plt.subplots(2, 5, figsize=(16, 8))
+    fig, axes = plt.subplots(3, 5, figsize=(11, 7))
     i = 0
     axes = axes.flat
     for key, value in resample_vars.items():
         # TODO: plot variables for multiple groups
         print(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
-        sns.kdeplot(value[:, 0], ax=axes[i], color='C0')
-        sns.kdeplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
+        sns.distplot(value[:, 0], ax=axes[i], color='C0')
+        sns.distplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
         axes[i].set_title(key)
         i += 1
 

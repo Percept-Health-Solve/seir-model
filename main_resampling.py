@@ -75,15 +75,23 @@ if __name__ == '__main__':
     df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('Date')
 
+    logging.info('Taking intersection of dates in all dataframes')
+    max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['Date'].max()])
+    logging.info(f'Maximum date at which all data sources had data: {max_date}')
+    df_confirmed = df_confirmed[df_confirmed['date'] < max_date]
+
     df_deaths = df_deaths[['date', 'WC']]
     df_confirmed = df_confirmed[['date', 'WC']]
 
+    logging.info('Linearly interpolating missing data')
     df_confirmed = df_confirmed.interpolate(method='linear')
 
+    logging.info('Setting date of lockdown 2020-03-27 to day 0')
     df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
 
+    logging.info('Merging data sources')
     df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
     df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
     df_merge = df_merge.interpolate(method='linear')
@@ -91,6 +99,7 @@ if __name__ == '__main__':
         ['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
     df_merge = df_merge.fillna(0)
 
+    logging.info('Casting data')
     df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
     df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
     df_merge['Day'] = df_merge['Day'].astype(int)
@@ -103,15 +112,23 @@ if __name__ == '__main__':
 
     logging.info('Solving model')
     # have to do this nonsense fiesta to prevent segmentation faults
-    tt = np.arange(t0, 10+1)
-    y = model.solve(tt)
-    ttt = np.arange(10, 150+1)
-    yy = model.solve(ttt, y0=y[-1].reshape(-1))
-    tttt = np.arange(150, 300)
-    yyy = model.solve(tttt, y0=yy[-1].reshape(-1))
+    t_skip = 10
+    ys = []
+    ts = []
+    y = None
+    for t_start in range(t0, 300-t_skip, t_skip):
+        tt = np.arange(t_start, t_start + t_skip+1)
+        logging.info(f'Solving in range {tt}')
+        if y is None:
+            y = model.solve(tt, y0=y0)
+        else:
+            y = model.solve(tt, y0=y[-1].reshape(-1))
+        ts.append(tt[:-1])
+        ys.append(y[:-1])
 
-    tt = np.concatenate([tt[:-1], ttt[:-1], tttt])
-    y = np.concatenate([y[:-1], yy[:-1], yyy])
+    tt = np.concatenate(ts)
+    y = np.concatenate(ys)
+    print(tt)
 
     i_as = y[:, :, :, 2]
     i_m = y[:, :, :, 3]
@@ -184,5 +201,4 @@ if __name__ == '__main__':
     df_stats.insert(0, 'Date', tt_date)
     print(df_stats.head())
     df_stats.to_csv('data/sampling_prediction.csv', index=False)
-
 
