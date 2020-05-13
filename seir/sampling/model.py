@@ -72,7 +72,7 @@ class SamplingNInfectiousModel:
         f_hosp_icu_prop = hosp_icu_prop * 1/time_h_to_r / \
                           ((1-hosp_icu_prop) * 1/time_h_to_icu + hosp_icu_prop * 1/time_h_to_r)
 
-        f_icu_d_prop = icu_d_prop * time_icu_to_r / (icu_d_prop * 1/time_icu_to_r + (1 - icu_d_prop) * 1/time_icu_to_d)
+        f_icu_d_prop = icu_d_prop * 1/time_icu_to_r / (icu_d_prop * 1/time_icu_to_r + (1 - icu_d_prop) * 1/time_icu_to_d)
 
         # check if y0 is correct
         # 1 s and 1 e state, 6 infectious states, and 4 recovered states (since severe cases must first go through h
@@ -153,8 +153,7 @@ class SamplingNInfectiousModel:
         di_s = inf_s_prop * e / self.time_inc - i_s / self.time_infectious
         di_i = i_s / self.time_infectious - i_i / time_i_to_h
         di_h = i_i / time_i_to_h - self.f_hosp_icu_prop * i_h / self.time_h_to_icu - (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
-        di_icu = self.f_hosp_icu_prop * i_h / self.time_h_to_icu - self.f_icu_d_prop * i_icu / self.time_icu_to_d \
-                 - (1 - self.f_icu_d_prop) * i_icu / self.time_icu_to_r
+        di_icu = self.f_hosp_icu_prop * i_h / self.time_h_to_icu - self.f_icu_d_prop * i_icu / self.time_icu_to_d - (1 - self.f_icu_d_prop) * i_icu / self.time_icu_to_r
         dr_as = i_as / self.time_infectious
         dr_m = i_m / self.time_infectious
         # dr_s = np.zeros((self.nb_samples, self.nb_groups))
@@ -208,7 +207,8 @@ class SamplingNInfectiousModel:
                                 ratio_m_detected=0.3,
                                 ratio_s_detected=1.0,
                                 ratio_resample: float = 0.1,
-                                y0=None) -> dict:
+                                y0=None,
+                                smoothing=1) -> dict:
         # cast variables
         t = np.asarray(t)
         i_d_obs = None if i_d_obs is None else np.asarray(i_d_obs).reshape(-1, 1, 1).astype(int)
@@ -228,7 +228,7 @@ class SamplingNInfectiousModel:
         logging.info('Solving system')
         y = self.solve(t, y0)
 
-        logging.info('Collecting necessary variables')
+        logging.info('Collecting necessary variables from solution')
         i_as = y[:, :, :, 2]
         i_m = y[:, :, :, 3]
         i_s = y[:, :, :, 4]
@@ -246,24 +246,33 @@ class SamplingNInfectiousModel:
 
 
         # model detected cases as poisson distribution y~P(lambda=detected_cases) with stirling's approximation for log y!
+        logging.info('Calculating log weights')
         log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, np.round(cum_detected_samples))
         log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, np.round(i_h))
         log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, np.round(i_icu))
         log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, np.round(d_icu))
 
-        # calculate the log weights
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
-        print('log_weights:', log_weights)
-        print('log_weights_min:', log_weights.min())
-        weights = softmax(log_weights)
+        weights = softmax(log_weights/smoothing)
+
+        logging.info(f'log_weights_min: {log_weights.min()}')
+        logging.info(f'log_weights_max: {log_weights.max()}')
+        logging.info(f'Proportion weights above 0: {np.mean(weights > 0):.6}')
+        logging.info(f'Proportion weights above 1E-20: {np.mean(weights > 1E-20):.6}')
+        logging.info(f'Proportion weights above 1E-10: {np.mean(weights > 1E-10):.8}')
+        logging.info(f'Proportion weights above 1E-3: {np.mean(weights > 1E-3):.10}')
+        logging.info(f'Proportion weights above 1E-2: {np.mean(weights > 1E-2):.10}')
+        logging.info(f'Proportion weights above 1E-1: {np.mean(weights > 1E-1):.10}')
+        logging.info(f'Proportion weights above 0.5: {np.mean(weights > 0.5):.10}')
 
         # resample the sampled variables
         m = int(np.round(self.nb_samples * ratio_resample))
         logging.info(f'Resampling {list(self.sample_vars.keys())} {m} times from {self.nb_samples} original samples')
+        resample_indices = np.random.choice(self.nb_samples, m, p=weights)
         resample_vars = {}
         for key, value in self.sample_vars.items():
             logging.info(f'Resampling {key}')
-            resample_vars[key] = value[np.random.choice(value.shape[0], m, p=weights)]
+            resample_vars[key] = value[resample_indices]
         logging.info(f'Succesfully resampled {list(resample_vars.keys())} {m} times from {self.nb_samples} original samples')
 
         self.resample_vars = resample_vars
@@ -359,6 +368,6 @@ _log_l = np.vectorize(_log_l)
 
 
 def _log_poisson(k, l):
-    out = k * _log_l(l) - l - gammaln(k+1)
+    out = k * np.log(l+1E-20) - l - gammaln(k+1)
     out = np.sum(out, axis=(0, 2))
     return out
