@@ -75,15 +75,23 @@ if __name__ == '__main__':
     df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('Date')
 
+    logging.info('Taking intersection of dates in all dataframes')
+    max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['Date'].max()])
+    logging.info(f'Maximum date at which all data sources had data: {max_date}')
+    df_confirmed = df_confirmed[df_confirmed['date'] < max_date]
+
     df_deaths = df_deaths[['date', 'WC']]
     df_confirmed = df_confirmed[['date', 'WC']]
 
+    logging.info('Linearly interpolating missing data')
     df_confirmed = df_confirmed.interpolate(method='linear')
 
+    logging.info('Setting date of lockdown 2020-03-27 to day 0')
     df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
 
+    logging.info('Merging data sources')
     df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
     df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
     df_merge = df_merge.interpolate(method='linear')
@@ -91,6 +99,7 @@ if __name__ == '__main__':
         ['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
     df_merge = df_merge.fillna(0)
 
+    logging.info('Casting data')
     df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
     df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
     df_merge['Day'] = df_merge['Day'].astype(int)
