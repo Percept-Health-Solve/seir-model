@@ -93,10 +93,10 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
 #if __name__ == '__main__':
 
 nb_groups = 1
-nb_samples = 2 #100000
+nb_samples = 100000 #100000
 
 r0 = np.random.normal(2.75, 0.5, size=(nb_samples, 1))    # from U(2,3.5)
-time_infectious = np.random.uniform(1.5, 6, size=(nb_samples, 1)) # changed upper limit from 4
+time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1)) # upper limit of 4 - basis?
 e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
 y0 = np.zeros((nb_samples, nb_groups, 13))
 y0[:, :, 0] = 7000000 - e0
@@ -125,7 +125,7 @@ model = SamplingNInfectiousModel(
     hosp_icu_prop=np.random.normal(0.2133,0.05,size=(nb_samples, 1)),
     icu_d_prop=np.random.normal(0.6,0.1,size=(nb_samples, 1)),
     y0=y0
-)
+) 
 
 # get data
 df_deaths = pd.read_csv(
@@ -229,7 +229,9 @@ scalar_vars = model.scalar_vars
 group_vars = model.group_vars
 
 e0_resample = e0[np.random.choice(nb_samples, int(ratio_resample*nb_samples), p=model.weights)]
-print(sum(model.weights<1e-20))
+
+# report on proportion of samples with essentially zero weight
+print(sum(model.weights==0))
 
 # add e0 and t0 manually
 # TODO: Let the model accept initial parameters as potential random variables
