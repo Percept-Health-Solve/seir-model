@@ -252,6 +252,7 @@ df_total['CFR'] = df_total['Dead'] / df_total['Cumulative Detected']
 df_total['Total hospitalised'] = [a + b for a, b in zip(df_total['Hospitalised'], df_total['ICU'])]
 df_total['Active infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total']
 df_total.to_csv('data/daily_output_' + descr + '.csv', index=False)
+df_total.to_csv('data/latest_ASSA_model_run.csv', index=False)
 
 # plot output
 fig, axes = plot_solution(df_total, full_descr, actual_infections, actual_hospitalisations, actual_deaths, 45, 90)
