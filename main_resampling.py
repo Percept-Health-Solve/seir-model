@@ -41,7 +41,7 @@ if __name__ == '__main__':
     r0 = resample_vars.pop('r0')
     groups = resample_vars.pop('group')
 
-    y0 = np.zeros((nb_samples, nb_groups, 13))
+    y0 = np.zeros((nb_samples, nb_groups, 14))
     y0[:, :, 0] = 7000000 - e0_resample
     y0[:, :, 1] = e0_resample
     y0 = y0.reshape(-1)
@@ -133,14 +133,15 @@ if __name__ == '__main__':
     i_as = y[:, :, :, 2]
     i_m = y[:, :, :, 3]
     i_s = y[:, :, :, 4]
-    i_i = y[:, :, :, 5]
-    i_h = y[:, :, :, 6]
-    i_icu = y[:, :, :, 7]
-    r_as = y[:, :, :, 8]
-    r_m = y[:, :, :, 9]
-    r_h = y[:, :, :, 10]
-    r_icu = y[:, :, :, 11]
-    d_icu = y[:, :, :, 12]
+    i_i_h = y[:, :, :, 5]
+    i_i_icu = y[:, :, :, 6]
+    i_h = y[:, :, :, 7]
+    i_icu = y[:, :, :, 8]
+    r_as = y[:, :, :, 9]
+    r_m = y[:, :, :, 10]
+    r_h = y[:, :, :, 11]
+    r_icu = y[:, :, :, 12]
+    d_icu = y[:, :, :, 13]
 
     ratio_as_detected = 0
     ratio_m_detected = 0.3
@@ -148,14 +149,14 @@ if __name__ == '__main__':
     ratio_resample = 0.1
 
     cum_detected_samples = ratio_as_detected * (i_as + r_as) + ratio_m_detected * (i_m + r_m) \
-                           + ratio_s_detected * (i_s + i_i + i_h + i_icu + r_h + r_icu + d_icu)
+                           + ratio_s_detected * (i_s + i_i_h + i_i_icu + i_h + i_icu + r_h + r_icu + d_icu)
 
     logging.info('Plotting solutions')
 
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 
     pred_vars = [cum_detected_samples, i_h, i_icu, d_icu]
-    obs_vars = [i_d_obs, i_h_obs + i_icu_obs, i_icu_obs, d_icu_obs]
+    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs]
     titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths']
 
     # turn time values into dates
