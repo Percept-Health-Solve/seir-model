@@ -86,44 +86,8 @@ def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, n
     with open(f'{base}_group.pkl', 'wb') as f:
         pickle.dump(group_vars, f)
 
-if __name__ == '__main__':
 
-    nb_groups = 1
-    nb_samples = 1000000
-    ratio_resample = 0.02
-
-    r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
-    time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
-    e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
-    y0 = np.zeros((nb_samples, nb_groups, 13))
-    y0[:, :, 0] = 7000000 - e0
-    y0[:, :, 1] = e0
-    y0 = y0.reshape(-1)
-    # y0 = [7000000-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    t0 = -50
-
-    inf_as_prop = np.random.uniform(0.7, 0.9, size=(nb_samples, 1))
-
-    model = SamplingNInfectiousModel(
-        nb_groups=nb_groups,
-        baseline_beta=r0/time_infectious,
-        rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
-        rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
-        rel_beta_as=np.random.uniform(0.6, 0.9, size=(nb_samples, 1)),
-        time_inc=5.1,
-        inf_as_prop=inf_as_prop,
-        inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
-        time_infectious=time_infectious,
-        time_s_to_h=6,
-        time_h_to_icu=10,
-        time_h_to_r=10,
-        time_icu_to_r=10,
-        time_icu_to_d=6,
-        hosp_icu_prop=0.2133,
-        icu_d_prop=0.6,
-        y0=y0
-    )
-
+def load_data():
     # get data
     logging.info('Loading data')
     df_deaths = pd.read_csv(
@@ -164,7 +128,8 @@ if __name__ == '__main__':
     df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
     df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
     df_merge = df_merge.interpolate(method='linear')
-    df_merge = df_merge[['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
+    df_merge = df_merge[
+        ['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
     df_merge = df_merge.fillna(0)
 
     logging.info('Casting data')
@@ -177,7 +142,7 @@ if __name__ == '__main__':
     # df_merge = df_merge[df_merge['WC_confirmed'] > 500]
     # df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
     # df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 5]
+    df_merge = df_merge[df_merge['WC_deaths'] > 15]
     logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
 
     t = df_merge['Day'].to_numpy()
@@ -185,6 +150,53 @@ if __name__ == '__main__':
     i_icu_obs = df_merge['Current ICU']
     i_d_obs = df_merge['WC_confirmed']
     d_icu_obs = df_merge['WC_deaths']
+
+    return t, i_h_obs, i_icu_obs, i_d_obs, d_icu_obs
+
+
+if __name__ == '__main__':
+
+    # get data
+    t, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data()
+
+    nb_groups = 1
+    nb_samples = 2000000
+    ratio_resample = 0.02
+
+    r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
+    time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
+    e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
+    hosp_icu_prop = 0.2133
+
+    y0 = np.zeros((nb_samples, nb_groups, 14))
+    y0[:, :, 0] = 7000000 - e0
+    y0[:, :, 1] = e0
+    y0 = y0.reshape(-1)
+    t0 = -50
+
+    inf_as_prop = np.random.uniform(0.7, 0.9, size=(nb_samples, 1))
+
+    model = SamplingNInfectiousModel(
+        nb_groups=nb_groups,
+        baseline_beta=r0/time_infectious,
+        rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
+        rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
+        rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
+        time_inc=5.1,
+        inf_as_prop=inf_as_prop,
+        inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
+        time_infectious=time_infectious,
+        time_s_to_h=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
+        time_s_to_icu=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
+        time_h_to_icu=10,
+        time_h_to_r=7,
+        time_icu_to_r=16,
+        time_icu_to_d=12,
+        s_hosp_prop=np.random.uniform(1-hosp_icu_prop+0.01, 1, size=(nb_samples, 1)),
+        hosp_icu_prop=hosp_icu_prop,
+        icu_d_prop=0.6,
+        y0=y0
+    )
 
     # get y_t.min() from y0
     logging.info('Solving for y at minimum data time')
@@ -201,12 +213,12 @@ if __name__ == '__main__':
     ratio_m_detected = 0.3
     ratio_s_detected = 1
 
-    model.calculate_sir_posterior(t, None, i_h_obs+i_h_obs, None, d_icu_obs, y0=y_tmin,
+    model.calculate_sir_posterior(t, None, i_h_obs, i_icu_obs, d_icu_obs, y0=y_tmin,
                                   ratio_as_detected=ratio_as_detected,
                                   ratio_m_detected=ratio_m_detected,
                                   ratio_s_detected=ratio_s_detected,
                                   ratio_resample=ratio_resample,
-                                  smoothing=1.5)
+                                  smoothing=1)
 
     sample_vars = model.sample_vars
     resample_vars = model.resample_vars
