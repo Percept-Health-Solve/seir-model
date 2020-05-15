@@ -166,11 +166,7 @@ if __name__ == '__main__':
     summary_stats = {}
     for j, row in enumerate(axes):
         for i in range(len(row)):
-            mu = np.mean(pred_vars[i], axis=1)
-            # std_err = st.sem(pred_vars[i], axis=1)
-            # h = std_err * st.t.ppf((1+0.95)/2, nb_samples-1)
-            # low = mu - h
-            # high = mu + h
+            mu = np.median(pred_vars[i], axis=1)
             low = np.percentile(pred_vars[i], 2.5, axis=1)
             high = np.percentile(pred_vars[i], 97.5, axis=1)
 
@@ -186,6 +182,7 @@ if __name__ == '__main__':
                 axes[j, i].set_title(titles[i])
             if j == 1:
                 axes[j, i].set_xlabel('Date')
+
             summary_stats[f'{titles[i]}_mean'] = mu.reshape(-1)
             summary_stats[f'{titles[i]}_2.5CI'] = low.reshape(-1)
             summary_stats[f'{titles[i]}_97.5CI'] = high.reshape(-1)
