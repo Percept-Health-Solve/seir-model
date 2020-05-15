@@ -78,6 +78,7 @@ class SamplingNInfectiousModel:
 
         # adjust the hospital proportion based on the proportion cases skipping this state
         hosp_icu_prop_adj = (hosp_icu_prop - (1 - s_hosp_prop)) / (s_hosp_prop)
+        assert np.min(hosp_icu_prop_adj) > 0
 
         # recalculate hospital and ICU proportions given competing time rates
         f_hosp_icu_prop = hosp_icu_prop_adj * 1/time_h_to_r / \
@@ -99,7 +100,7 @@ class SamplingNInfectiousModel:
                 return 1
             elif -11 <= t < 0:
                 return 1 - (1 - rel_lockdown_beta) / 11 * (t - 11)
-            elif 0 <= t < 6 * 7:
+            elif 0 <= t < 5 * 7:
                 return rel_lockdown_beta
             # else
             return rel_postlockdown_beta
