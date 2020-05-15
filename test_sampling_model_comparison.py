@@ -70,7 +70,7 @@ if __name__ == '__main__':
         rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
         rel_beta_as=0.5,
         time_incubate=5.1,
-        prop_as=0.75,
+        prop_a=0.75,
         prop_m=(1 - 0.75) * 0.1,
         time_infectious=time_infectious,
         time_s_to_h=6,

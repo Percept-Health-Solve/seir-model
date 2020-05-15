@@ -4,6 +4,8 @@ import pandas as pd
 from scipy.integrate import odeint
 from scipy.special import softmax, gammaln
 
+from seir.utils import calculate_detected_cases
+
 import logging
 
 
@@ -15,7 +17,7 @@ class SamplingNInfectiousModel:
                  rel_lockdown_beta=None,
                  rel_postlockdown_beta=None,
                  rel_beta_as=None,
-                 prop_as=None,
+                 prop_a=None,
                  prop_m=None,
                  prop_s_to_h=None,
                  prop_h_to_c=None,
@@ -41,7 +43,7 @@ class SamplingNInfectiousModel:
         rel_beta_as = np.asarray(rel_beta_as)
 
         # proportions
-        prop_as = np.asarray(prop_as)
+        prop_a = np.asarray(prop_a)
         prop_m = np.asarray(prop_m)
         prop_s_to_h = np.asarray(prop_s_to_h)
         prop_h_to_c = np.asarray(prop_h_to_c)
@@ -60,9 +62,16 @@ class SamplingNInfectiousModel:
         time_c_to_d = np.asarray(time_c_to_d)
 
         # calculated vars
-        prop_s = 1 - prop_as - prop_m
+        r0 = beta * time_infectious  # TODO: Calculate r0 as leading eigenvalue of NGM
+
+        prop_s = 1 - prop_a - prop_m
         prop_s_to_c = 1 - prop_s_to_h
         prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
+        prop_c_to_r = 1 - prop_c_to_d
+
+        time_i_to_h = time_infectious - time_s_to_h
+        time_i_to_c = time_infectious - time_s_to_c
+
 
         # collect variables into specific dictionaries
 
@@ -74,15 +83,13 @@ class SamplingNInfectiousModel:
         }
 
         prop_vars = {
-            'prop_as': prop_as,
+            'prop_a': prop_a,
             'prop_m': prop_m,
-            'prop_s': prop_s,
             'prop_s_to_h': prop_s_to_h,
-            'prop_s_to_c': prop_s_to_c,
             'prop_h_to_c': prop_h_to_c,
             'prop_h_to_d': prop_h_to_d,
-            'prop_h_to_r': prop_h_to_r,
-            'prop_c_to_d': prop_c_to_d
+            'prop_c_to_d': prop_c_to_d,
+            'prop_c_to_r': prop_c_to_r
         }
 
         time_vars = {
@@ -97,6 +104,16 @@ class SamplingNInfectiousModel:
             'time_c_to_d': time_c_to_d,
         }
 
+        calculated_vars = {
+            'r0': r0,
+            'prop_s': prop_s,
+            'prop_s_to_c': prop_s_to_c,
+            'prop_h_to_r': prop_h_to_r,
+            'prop_c_to_r': prop_c_to_r,
+            'time_i_to_h': time_i_to_h,
+            'time_i_to_c': time_i_to_c
+        }
+
         # assert specific properties of variables
         for key, value in beta_vars.items():
             assert np.all(beta >= 0), f"Value in '{key}' is smaller than 0"
@@ -104,22 +121,44 @@ class SamplingNInfectiousModel:
             assert np.all(value <= 1), f"Value in proportion '{key}' is greater than 1"
             assert np.all(value >= 1), f"Value in proportion '{key}' is smaller than 0"
         for key, value in time_vars.items():
-            assert np.all(value >= 0), f"Value in time '{key}' is smaller than 0."
+            assert np.all(value > 0), f"Value in time '{key}' is smaller than or equal to 0"
+
+        # check if calculated vars obey constraints
+        # only need to check the few that aren't caught by the above checks
+        assert np.all(prop_s <= 1), "Value in proportion 'prop_s = 1 - prop_a - prop_m' is greater than 1"
+        assert np.all(prop_s >= 0), "Value in proportion 'prop_s = 1 - prop_a - prop_m' is smaller than 0"
+
+        assert np.all(prop_h_to_r <= 1), \
+            "Value in proportion 'prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d' is greater than 1"
+        assert np.all(prop_h_to_r >= 0), \
+            "Value in proportion 'prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d' is smaller than 0"
+
+        assert np.all(time_i_to_h > 0), "Value in time 'time_i_to_h' is smaller than or equal to 0"
+        assert np.all(time_i_to_c > 0), "Value in time 'time_i_to_c' is smaller than or equal to 0"
 
 
         # intrinsic parameter measuring the number of internal states of which to keep track
-        nb_states = 16
+        nb_states = 18
 
-        # detect the number of samples made, check for consistency, and assert the shapes of the parameters
+        # detect the number of given samples, check for consistency, and assert the shapes of the parameters
         nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
             **beta_vars,
             **prop_vars,
             **time_vars
         }, nb_groups)
 
+        # do the same for the calculated variables
+        _, (calculated_scalar_vars, calculated_group_vars, calculated_sample_vars) = _determine_sample_vars({
+            **calculated_vars
+        }, nb_groups)
+
         logging.info(f'Scalar variables: {list(scalar_vars.keys())}')
         logging.info(f'Group variables: {list(group_vars.keys())}')
         logging.info(f'Sampled variables: {list(sample_vars.keys())}')
+
+        logging.info(f'Calculated scalar variables: {list(calculated_scalar_vars.keys())}')
+        logging.info(f'Calculated group variables: {list(calculated_group_vars.keys())}')
+        logging.info(f'Calculated sampled variables: {list(calculated_group_vars.keys())}')
 
         # check if y0 shape is correct
         y0 = np.asarray(y0)
@@ -159,20 +198,24 @@ class SamplingNInfectiousModel:
         self.rel_postlockdown_beta = rel_postlockdown_beta
 
         # proportion proporties
-        self.prop_as = prop_as
+        self.prop_a = prop_a
         self.prop_m = prop_m
         self.prop_s = prop_s
         self.prop_s_to_h = prop_s_to_h
+        self.prop_s_to_c = prop_s_to_c
         self.prop_h_to_c = prop_h_to_c
         self.prop_h_to_d = prop_h_to_d
         self.prop_h_to_r = prop_h_to_r
         self.prop_c_to_d = prop_c_to_d
+        self.prop_c_to_r = prop_c_to_r
 
         # time properties
-        self.time_inc = time_incubate
+        self.time_incubate = time_incubate
         self.time_infectious = time_infectious
         self.time_s_to_h = time_s_to_h
         self.time_s_to_c = time_s_to_c
+        self.time_i_to_h = time_i_to_h
+        self.time_i_to_c = time_i_to_c
         self.time_h_to_c = time_h_to_c
         self.time_h_to_r = time_h_to_r
         self.time_h_to_d = time_h_to_d
@@ -183,10 +226,20 @@ class SamplingNInfectiousModel:
         self.y0 = y0
         self.n = n
 
-        # scalar properties
+        # variable disctionaries
+        self.beta_vars = beta_vars
+        self.prop_vars = prop_vars
+        self.time_vars = time_vars
+        self.calculated_vars = calculated_vars
+
+        # scalar, group, and sample properties
         self.scalar_vars = scalar_vars
         self.group_vars = group_vars
         self.sample_vars = sample_vars
+
+        self.calculated_scalar_vars = calculated_scalar_vars
+        self.calculated_group_vars = calculated_group_vars
+        self.calculated_sample_vars = calculated_sample_vars
 
         # function properties
         self.infectious_func = infectious_func
@@ -195,132 +248,159 @@ class SamplingNInfectiousModel:
         # private proporties relating to whether the model has been internally solved at least once
         self._solved = False
         self._t = None
-        self.solution = None
+        self._solution = None
 
         # initialising proporties for use in the calculate_sir_posterior function
         self.resample_vars = None
+        self.calculated_resample_vars = None
         self.log_weights = None
         self.weights = None
 
     def _ode(self, y, t):
         # get seird
-        s, e, i_as, i_m, i_s, i_i_h, i_i_icu, i_h, i_icu, _, _, _, _, _ = self._get_seird_from_flat_y(y)
+        s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d = self._get_seird_from_flat_y(y, return_removed=False)
 
-        # get meta vars
-        inf_s_prop = 1 - self.prop_as - self.prop_m
-        time_i_to_h = self.time_s_to_h - self.time_infectious
-        time_i_to_icu = self.time_s_to_c - self.time_infectious
-
+        infectious_strength = np.sum(self.rel_beta_as * i_a + i_m + i_s, axis=1, keepdims=True)
 
         # solve seird equations
-        ds = - 1 / self.n * self.infectious_func(t) * self.beta * np.sum(self.rel_beta_as * i_as + i_m + i_s, axis=1, keepdims=True) * s
-        de = 1 / self.n * self.infectious_func(t) * self.beta * np.sum(self.rel_beta_as * i_as + i_m + i_s, axis=1, keepdims=True) * s - e / self.time_inc
-        di_as = self.prop_as * e / self.time_inc - i_as / self.time_infectious
-        di_m = self.prop_m * e / self.time_inc - i_m / self.time_infectious
-        di_s = inf_s_prop * e / self.time_inc - i_s / self.time_infectious
-        di_i_h = self.prop_s_to_h * i_s / self.time_infectious - i_i_h / time_i_to_h
-        di_i_icu = (1 - self.prop_s_to_h) * i_s / self.time_infectious - i_i_icu / time_i_to_icu
-        di_h = i_i_h / time_i_to_h - self.f_hosp_icu_prop * i_h / self.time_h_to_c - (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
-        di_icu = self.f_hosp_icu_prop * i_h / self.time_h_to_c + i_i_icu / time_i_to_icu - self.f_icu_d_prop * i_icu / self.time_c_to_d - (1 - self.f_icu_d_prop) * i_icu / self.time_c_to_r
-        dr_as = i_as / self.time_infectious
-        dr_m = i_m / self.time_infectious
-        # dr_s = np.zeros((self.nb_samples, self.nb_groups))
-        # dr_i = np.zeros((self.nb_samples, self.nb_groups))
-        dr_h = (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
-        dr_icu = (1 - self.f_icu_d_prop) * i_icu / self.time_c_to_r
-        dd_icu = self.f_icu_d_prop * i_icu / self.time_c_to_d
+        ds = - 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s
+        de = 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s - e / self.time_incubate
 
+        di_a = self.prop_a * e / self.time_incubate - i_a / self.time_infectious
+        di_m = self.prop_m * e / self.time_incubate - i_m / self.time_infectious
+        di_s = self.prop_s * e / self.time_incubate - i_s / self.time_infectious
+
+        di_h = self.prop_s_to_h * i_s / self.time_infectious - i_h / self.time_i_to_h
+        di_c = self.prop_s_to_c * i_s / self.time_infectious - i_c / self.time_i_to_c
+
+        dh_r = self.prop_h_to_r * i_h / self.time_i_to_h - h_r / self.time_h_to_r
+        dh_c = self.prop_h_to_c * i_h / self.time_i_to_h - h_c / self.time_h_to_c
+        dh_d = self.prop_h_to_d * i_h / self.time_i_to_h - h_d / self.time_h_to_d
+
+        dc_r = self.prop_c_to_r * h_c / self.time_h_to_c - c_r / self.time_c_to_r
+        dc_d = self.prop_c_to_d * h_c / self.time_h_to_c - c_d / self.time_c_to_d
+
+        dr_a = i_a / self.time_infectious
+        dr_m = i_m / self.time_infectious
+        dr_h = h_r / self.time_h_to_r
+        dr_c = c_r / self.time_c_to_r
+
+        dd_h = h_d / self.time_h_to_d
+        dd_c = c_d / self.time_c_to_d
+
+        # concatenate
         dydt = np.concatenate([
             ds.reshape(self.nb_samples, self.nb_groups, 1),
             de.reshape(self.nb_samples, self.nb_groups, 1),
-            di_as.reshape(self.nb_samples, self.nb_groups, 1),
+            di_a.reshape(self.nb_samples, self.nb_groups, 1),
             di_m.reshape(self.nb_samples, self.nb_groups, 1),
             di_s.reshape(self.nb_samples, self.nb_groups, 1),
-            di_i_h.reshape(self.nb_samples, self.nb_groups, 1),
-            di_i_icu.reshape(self.nb_samples, self.nb_groups, 1),
             di_h.reshape(self.nb_samples, self.nb_groups, 1),
-            di_icu.reshape(self.nb_samples, self.nb_groups, 1),
-            dr_as.reshape(self.nb_samples, self.nb_groups, 1),
+            di_c.reshape(self.nb_samples, self.nb_groups, 1),
+            di_h.reshape(self.nb_samples, self.nb_groups, 1),
+            di_c.reshape(self.nb_samples, self.nb_groups, 1),
+            dh_r.reshape(self.nb_samples, self.nb_groups, 1),
+            dh_c.reshape(self.nb_samples, self.nb_groups, 1),
+            dh_d.reshape(self.nb_samples, self.nb_groups, 1),
+            dc_r.reshape(self.nb_samples, self.nb_groups, 1),
+            dc_d.reshape(self.nb_samples, self.nb_groups, 1),
+            dr_a.reshape(self.nb_samples, self.nb_groups, 1),
             dr_m.reshape(self.nb_samples, self.nb_groups, 1),
             dr_h.reshape(self.nb_samples, self.nb_groups, 1),
-            dr_icu.reshape(self.nb_samples, self.nb_groups, 1),
-            dd_icu.reshape(self.nb_samples, self.nb_groups, 1)
+            dr_c.reshape(self.nb_samples, self.nb_groups, 1),
+            dd_h.reshape(self.nb_samples, self.nb_groups, 1),
+            dd_c.reshape(self.nb_samples, self.nb_groups, 1)
         ], axis=-1).reshape(-1)
 
         return dydt
 
-    def solve(self, t, y0=None):
+    def solve(self, t, y0=None, return_as_seird: bool = True):
         y0 = self.y0 if y0 is None else y0
         if not self._solved:
-            sol = odeint(self._ode, y0, t).reshape(-1, self.nb_samples, self.nb_groups, self.nb_states).clip(min=0)
-            self.solution = sol
+            y = odeint(self._ode, y0, t).reshape(-1, self.nb_samples, self.nb_groups, self.nb_states).clip(min=0)
+            self._solution = y
             self._t = t
             self._solved = True
-            return sol
         else:
             if np.all(t != self._t) or np.all(y0 != self.y0):
-                sol = odeint(self._ode, y0, t).reshape(-1, self.nb_samples, self.nb_groups, self.nb_states).clip(min=0)
+                y = odeint(self._ode, y0, t).reshape(-1, self.nb_samples, self.nb_groups, self.nb_states).clip(min=0)
                 self._t = t
-                self.solution = sol
-                return sol
+                self._solution = y
             else:
-                return self.solution
+                y = self._solution
+
+        if return_as_seird:
+            s = y[:, :, :, 0]
+            e = y[:, :, :, 1]
+            i_a = y[:, :, :, 2]
+            i_m = y[:, :, :, 3]
+            i_s = y[:, :, :, 4]
+            i_h = y[:, :, :, 5]
+            i_c = y[:, :, :, 6]
+            h_r = y[:, :, :, 7]
+            h_c = y[:, :, :, 8]
+            h_d = y[:, :, :, 9]
+            c_r = y[:, :, :, 10]
+            c_d = y[:, :, :, 11]
+            r_a = y[:, :, :, 12]
+            r_m = y[:, :, :, 13]
+            r_h = y[:, :, :, 14]
+            r_c = y[:, :, :, 15]
+            d_h = y[:, :, :, 16]
+            d_c = y[:, :, :, 17]
+            return s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c
+        return y
 
     def calculate_sir_posterior(self,
                                 t,
-                                i_d_obs=None,
-                                i_h_obs=None,
-                                i_icu_obs=None,
-                                d_icu_obs=None,
+                                det_obs=None,
+                                h_obs=None,
+                                c_obs=None,
+                                deaths_obs=None,
                                 ratio_as_detected=0.,
                                 ratio_m_detected=0.3,
                                 ratio_s_detected=1.0,
                                 ratio_resample: float = 0.1,
                                 y0=None,
-                                smoothing=1) -> dict:
+                                smoothing=1):
+        # number of resamples
+        m = int(np.round(self.nb_samples * ratio_resample))
+
         # cast variables
         t = np.asarray(t)
-        i_d_obs = None if i_d_obs is None else np.asarray(i_d_obs).reshape(-1, 1, 1).astype(int)
-        i_h_obs = None if i_h_obs is None else np.asarray(i_h_obs).reshape(-1, 1, 1).astype(int)
-        i_icu_obs = None if i_icu_obs is None else np.asarray(i_icu_obs).reshape(-1, 1, 1).astype(int)
-        d_icu_obs = None if d_icu_obs is None else np.asarray(d_icu_obs).reshape(-1, 1, 1).astype(int)
+        det_obs = None if det_obs is None else np.asarray(det_obs).reshape(-1, 1, 1).astype(int)
+        h_obs = None if h_obs is None else np.asarray(h_obs).reshape(-1, 1, 1).astype(int)
+        c_obs = None if c_obs is None else np.asarray(c_obs).reshape(-1, 1, 1).astype(int)
+        deaths_obs = None if deaths_obs is None else np.asarray(deaths_obs).reshape(-1, 1, 1).astype(int)
 
         # assert shapes
         # TODO: Implement linear interpolation for cases where t does not directly match the data
         # TODO: Implement checks for when data is group specific
 
-        # assert i_d_obs.ndim == 1 and i_d_obs.size == t.size, "Observed detected cases does not match time size"
-        # assert i_h_obs.ndim == 1 and i_h_obs.size == t.size, "Observed hospital cases does not match time size"
-        # assert i_icu_obs.ndim == 1 and i_icu_obs.size == t.size, "Observed ICU cases does not match time size"
-        # assert d_icu_obs.ndim == 1 and d_icu_obs.size == t.size, "Observed deaths does not match time size"
+        # assert det_obs.ndim == 1 and det_obs.size == t.size, "Observed detected cases does not match time size"
+        # assert h_obs.ndim == 1 and h_obs.size == t.size, "Observed hospital cases does not match time size"
+        # assert c_obs.ndim == 1 and c_obs.size == t.size, "Observed ICU cases does not match time size"
+        # assert deaths_obs.ndim == 1 and deaths_obs.size == t.size, "Observed deaths does not match time size"
 
         logging.info('Solving system')
-        y = self.solve(t, y0)
+        s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c = self.solve(t, y0)
 
-        logging.info('Collecting necessary variables from solution')
-        i_as = y[:, :, :, 2]
-        i_m = y[:, :, :, 3]
-        i_s = y[:, :, :, 4]
-        i_i_h = y[:, :, :, 5]
-        i_i_icu = y[:, :, :, 6]
-        i_h = y[:, :, :, 7]
-        i_icu = y[:, :, :, 8]
-        r_as = y[:, :, :, 9]
-        r_m = y[:, :, :, 10]
-        r_h = y[:, :, :, 11]
-        r_icu = y[:, :, :, 12]
-        d_icu = y[:, :, :, 13]
+        detected = calculate_detected_cases(infected_asymptomatic=i_a,
+                                            infected_mild=i_m,
+                                            infected_severe=i_s + i_h + i_c + h_r + h_c + h_c + c_r + c_d,
+                                            removed_asymptomatic=r_a,
+                                            removed_mild=r_m,
+                                            removed_severe=r_h + r_c + d_h + d_c,
+                                            ratio_asymptomatic_detected=ratio_as_detected,
+                                            ratio_mild_detected=ratio_m_detected,
+                                            ratio_severe_detected=ratio_s_detected)
 
-        cum_detected_samples = ratio_as_detected * (i_as + r_as) + ratio_m_detected * (i_m + r_m) \
-                               + ratio_s_detected * (i_s + i_i_h + i_i_icu + i_h + i_icu + r_h + r_icu + d_icu)
-
-
-        # model detected cases as poisson distribution y~P(lambda=detected_cases) with stirling's approximation for log y!
+        # model detected cases as poisson distribution y~P(lambda=detected_cases)
         logging.info('Calculating log weights')
-        log_weights_detected = 0 if i_d_obs is None else _log_poisson(i_d_obs, cum_detected_samples)
-        log_weights_hospital = 0 if i_h_obs is None else _log_poisson(i_h_obs, i_h)
-        log_weights_icu = 0 if i_icu_obs is None else _log_poisson(i_icu_obs, i_icu)
-        log_weights_dead = 0 if d_icu_obs is None else _log_poisson(d_icu_obs, d_icu)
+        log_weights_detected = 0 if det_obs is None else _log_poisson(det_obs, detected)
+        log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_r + h_c + h_d)
+        log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_r + c_d)
+        log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_h + d_c)
 
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
         weights = softmax(log_weights/smoothing)
@@ -336,37 +416,65 @@ class SamplingNInfectiousModel:
         logging.info(f'Proportion weights above 0.5: {np.mean(weights > 0.5):.10}')
 
         # resample the sampled variables
-        m = int(np.round(self.nb_samples * ratio_resample))
         logging.info(f'Resampling {list(self.sample_vars.keys())} {m} times from {self.nb_samples} original samples')
         resample_indices = np.random.choice(self.nb_samples, m, p=weights)
         resample_vars = {}
         for key, value in self.sample_vars.items():
-            logging.info(f'Resampling {key}')
             resample_vars[key] = value[resample_indices]
-        logging.info(f'Succesfully resampled {list(resample_vars.keys())} {m} times from {self.nb_samples} original samples')
+        logging.info(f'Succesfully resampled {list(resample_vars.keys())}')
+
+        # resample calculated variables
+        logging.info(f'Resampling calculated variables {list(self.calculated_sample_vars.keys())}')
+        calculated_resample_vars = {}
+        for key, value in self.calculated_sample_vars.items():
+            calculated_resample_vars[key] = value[resample_indices]
+        logging.info(f'Succesfully resampled {list(resample_vars.keys())}')
 
         self.resample_vars = resample_vars
+        self.calculated_resample_vars = calculated_resample_vars
         self.log_weights = log_weights
         self.weights = weights
 
-    def _get_seird_from_flat_y(self, y):
+    def _get_seird_from_flat_y(self, y, return_removed=True):
         y = y.reshape(self.nb_samples, self.nb_groups, self.nb_states)
+        # susceptible
         s = y[:, :, 0]
+
+        # exposed
         e = y[:, :, 1]
-        i_as = y[:, :, 2]
+
+        # infectious
+        i_a = y[:, :, 2]
         i_m = y[:, :, 3]
         i_s = y[:, :, 4]
-        i_i_h = y[:, :, 5]
-        i_i_icu = y[:, :, 6]
-        i_h = y[:, :, 7]
-        i_icu = y[:, :, 8]
-        r_as = y[:, :, 9]
-        r_m = y[:, :, 10]
-        r_h = y[:, :, 11]
-        r_icu = y[:, :, 12]
-        d_icu = y[:, :, 13]
 
-        return s, e, i_as, i_m, i_s, i_i_h, i_i_icu, i_h, i_icu, r_as, r_m, r_h, r_icu, d_icu
+        # isolated
+        i_h = y[:, :, 5]
+        i_c = y[:, :, 6]
+
+        # hospitalised
+        h_r = y[:, :, 7]
+        h_c = y[:, :, 8]
+        h_d = y[:, :, 9]
+
+        # critical care
+        c_r = y[:, :, 10]
+        c_d = y[:, :, 11]
+
+        # removed
+        r_a = y[:, :, 12]
+        r_m = y[:, :, 13]
+        r_h = y[:, :, 14]
+        r_c = y[:, :, 15]
+
+        # deceased
+        d_h = y[:, :, 16]
+        d_c = y[:, :, 17]
+
+        if return_removed:
+            return s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c
+        else:
+            return s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d
 
 
 def _determine_sample_vars(vars: dict, nb_groups):
@@ -418,24 +526,6 @@ def _determine_sample_vars(vars: dict, nb_groups):
         nb_samples = 1
 
     return nb_samples, (scalar_vars, group_vars, sample_vars)
-
-
-def _log_k_factorial(k):
-    if k == 0:
-        return 0
-    else:
-        return 1 / 2 * np.log(2 * np.pi * k) + k * (np.log(k) - 1)
-
-
-def _log_l(l):
-    if l <= 1:
-        return 0
-    else:
-        return np.log(l)
-
-
-_log_k_factorial = np.vectorize(_log_k_factorial)
-_log_l = np.vectorize(_log_l)
 
 
 def _log_poisson(k, l):

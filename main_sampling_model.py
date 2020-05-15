@@ -184,7 +184,7 @@ if __name__ == '__main__':
         rel_postlockdown_beta=0.8,
         rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
         time_incubate=5.1,
-        prop_as=inf_as_prop,
+        prop_a=inf_as_prop,
         prop_m=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
         time_infectious=time_infectious,
         time_s_to_h=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
