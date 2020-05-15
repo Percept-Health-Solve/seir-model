@@ -179,23 +179,23 @@ if __name__ == '__main__':
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
-        baseline_beta=r0/time_infectious,
+        beta=r0 / time_infectious,
         rel_lockdown_beta=rel_lockdown_beta,
         rel_postlockdown_beta=0.8,
         rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
-        time_inc=5.1,
-        inf_as_prop=inf_as_prop,
-        inf_m_prop=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
+        time_incubate=5.1,
+        prop_as=inf_as_prop,
+        prop_m=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
         time_infectious=time_infectious,
         time_s_to_h=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
-        time_s_to_icu=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
-        time_h_to_icu=10,
+        time_s_to_c=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
+        time_h_to_c=10,
         time_h_to_r=7,
-        time_icu_to_r=16,
-        time_icu_to_d=12,
-        s_hosp_prop=np.random.uniform(1-hosp_icu_prop+0.01, 1, size=(nb_samples, 1)),
-        hosp_icu_prop=hosp_icu_prop,
-        icu_d_prop=np.random.uniform(0.5, 1, size=(nb_samples, 1)),
+        time_c_to_r=16,
+        time_c_to_d=12,
+        prop_s_to_h=np.random.uniform(1 - hosp_icu_prop + 0.01, 1, size=(nb_samples, 1)),
+        prop_h_to_c=hosp_icu_prop,
+        prop_c_to_d=np.random.uniform(0.5, 1, size=(nb_samples, 1)),
         y0=y0
     )
 
@@ -234,7 +234,7 @@ if __name__ == '__main__':
     sample_vars['e0'] = e0
     sample_vars['r0'] = r0
     resample_vars['e0'] = e0_resample
-    resample_vars['r0'] = resample_vars['time_infectious'] * resample_vars['baseline_beta']
+    resample_vars['r0'] = resample_vars['time_infectious'] * resample_vars['beta']
 
     # save variables
     save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))

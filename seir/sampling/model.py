@@ -11,90 +11,125 @@ class SamplingNInfectiousModel:
 
     def __init__(self,
                  nb_groups: int,
-                 baseline_beta=None,
+                 beta=None,
                  rel_lockdown_beta=None,
                  rel_postlockdown_beta=None,
                  rel_beta_as=None,
-                 time_inc=None,
-                 inf_as_prop=None,
-                 inf_m_prop=None,
+                 prop_as=None,
+                 prop_m=None,
+                 prop_s_to_h=None,
+                 prop_h_to_c=None,
+                 prop_h_to_d=None,
+                 prop_c_to_d=None,
+                 time_incubate=None,
                  time_infectious=None,
                  time_s_to_h=None,
-                 time_s_to_icu=None,
-                 time_h_to_icu=None,
+                 time_s_to_c=None,
+                 time_h_to_c=None,
                  time_h_to_r=None,
-                 time_icu_to_r=None,
-                 time_icu_to_d=None,
-                 s_hosp_prop=None,
-                 hosp_icu_prop=None,
-                 icu_d_prop=None,
+                 time_h_to_d=None,
+                 time_c_to_r=None,
+                 time_c_to_d=None,
                  y0=None,
                  imported_func=None):
         logging.info('Initizializing model')
-        # cast potential sampling variables to correct data types
-        baseline_beta = np.asarray(baseline_beta)
+
+        # infectious and relative to infectious rates
+        beta = np.asarray(beta)
         rel_lockdown_beta = np.asarray(rel_lockdown_beta)
         rel_postlockdown_beta = np.asarray(rel_postlockdown_beta)
         rel_beta_as = np.asarray(rel_beta_as)
-        time_inc = np.asarray(time_inc)
-        inf_as_prop = np.asarray(inf_as_prop)
-        inf_m_prop = np.asarray(inf_m_prop)
+
+        # proportions
+        prop_as = np.asarray(prop_as)
+        prop_m = np.asarray(prop_m)
+        prop_s_to_h = np.asarray(prop_s_to_h)
+        prop_h_to_c = np.asarray(prop_h_to_c)
+        prop_h_to_d = np.asarray(prop_h_to_d)
+        prop_c_to_d = np.asarray(prop_c_to_d)
+
+        # times
+        time_incubate = np.asarray(time_incubate)
         time_infectious = np.asarray(time_infectious)
         time_s_to_h = np.asarray(time_s_to_h)
-        time_s_to_icu = np.asarray(time_s_to_icu)
-        time_h_to_icu = np.asarray(time_h_to_icu)
+        time_s_to_c = np.asarray(time_s_to_c)
+        time_h_to_c = np.asarray(time_h_to_c)
         time_h_to_r = np.asarray(time_h_to_r)
-        time_icu_to_r = np.asarray(time_icu_to_r)
-        time_icu_to_d = np.asarray(time_icu_to_d)
-        s_hosp_prop = np.asarray(s_hosp_prop)
-        hosp_icu_prop = np.asarray(hosp_icu_prop)
-        icu_d_prop = np.asarray(icu_d_prop)
+        time_h_to_d = np.asarray(time_h_to_d)
+        time_c_to_r = np.asarray(time_c_to_r)
+        time_c_to_d = np.asarray(time_c_to_d)
 
-        nb_states = 14
+        # calculated vars
+        prop_s = 1 - prop_as - prop_m
+        prop_s_to_c = 1 - prop_s_to_h
+        prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
 
-        nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
-            'baseline_beta': baseline_beta,
+        # collect variables into specific dictionaries
+
+        beta_vars = {
+            'beta': beta,
             'rel_lockdown_beta': rel_lockdown_beta,
             'rel_postlockdown_beta': rel_postlockdown_beta,
-            'rel_beta_as': rel_beta_as,
-            'time_inc': time_inc,
-            'inf_as_prop': inf_as_prop,
-            'inf_m_prop': inf_m_prop,
+            'rel_beta_as': rel_beta_as
+        }
+
+        prop_vars = {
+            'prop_as': prop_as,
+            'prop_m': prop_m,
+            'prop_s': prop_s,
+            'prop_s_to_h': prop_s_to_h,
+            'prop_s_to_c': prop_s_to_c,
+            'prop_h_to_c': prop_h_to_c,
+            'prop_h_to_d': prop_h_to_d,
+            'prop_h_to_r': prop_h_to_r,
+            'prop_c_to_d': prop_c_to_d
+        }
+
+        time_vars = {
+            'time_incubate': time_incubate,
             'time_infectious': time_infectious,
             'time_s_to_h': time_s_to_h,
-            'time_s_to_icu': time_s_to_icu,
-            'time_h_to_icu': time_h_to_icu,
+            'time_s_to_c': time_s_to_c,
+            'time_h_to_c': time_h_to_c,
             'time_h_to_r': time_h_to_r,
-            'time_icu_to_r': time_icu_to_r,
-            'time_icu_to_d': time_icu_to_d,
-            's_hosp_prop': s_hosp_prop,
-            'hosp_icu_prop': hosp_icu_prop,
-            'icu_d_prop': icu_d_prop
+            'time_h_to_d': time_h_to_d,
+            'time_c_to_r': time_c_to_r,
+            'time_c_to_d': time_c_to_d,
+        }
+
+        # assert specific properties of variables
+        for key, value in beta_vars.items():
+            assert np.all(beta >= 0), f"Value in '{key}' is smaller than 0"
+        for key, value in prop_vars.items():
+            assert np.all(value <= 1), f"Value in proportion '{key}' is greater than 1"
+            assert np.all(value >= 1), f"Value in proportion '{key}' is smaller than 0"
+        for key, value in time_vars.items():
+            assert np.all(value >= 0), f"Value in time '{key}' is smaller than 0."
+
+
+        # intrinsic parameter measuring the number of internal states of which to keep track
+        nb_states = 16
+
+        # detect the number of samples made, check for consistency, and assert the shapes of the parameters
+        nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
+            **beta_vars,
+            **prop_vars,
+            **time_vars
         }, nb_groups)
 
         logging.info(f'Scalar variables: {list(scalar_vars.keys())}')
         logging.info(f'Group variables: {list(group_vars.keys())}')
         logging.info(f'Sampled variables: {list(sample_vars.keys())}')
 
-        # adjust the hospital proportion based on the proportion cases skipping this state
-        hosp_icu_prop_adj = (hosp_icu_prop - (1 - s_hosp_prop)) / (s_hosp_prop)
-        assert np.min(hosp_icu_prop_adj) > 0
-
-        # recalculate hospital and ICU proportions given competing time rates
-        f_hosp_icu_prop = hosp_icu_prop_adj * 1/time_h_to_r / \
-                          ((1-hosp_icu_prop_adj) * 1/time_h_to_icu + hosp_icu_prop_adj * 1/time_h_to_r)
-
-        f_icu_d_prop = icu_d_prop * 1/time_icu_to_r / (icu_d_prop * 1/time_icu_to_r + (1 - icu_d_prop) * 1/time_icu_to_d)
-
-        # check if y0 is correct
-        # 1 s and 1 e state, 6 infectious states, and 4 recovered states (since severe cases must first go through h
-        # in order to recover)
+        # check if y0 shape is correct
         y0 = np.asarray(y0)
         assert y0.size == nb_states * nb_groups * nb_samples, \
             f"y0 should have size {nb_states * nb_groups * nb_samples}, got {y0.size} instead"
+
+        # find the total population from y0, assumed to be constant or change very little over time
         n = np.sum(y0.reshape(nb_samples, nb_groups * nb_states), axis=1, keepdims=True)
 
-        # check infectious func
+        # build infectious function from given parameters
         def infectious_func(t):
             if t < -11:
                 return 1
@@ -111,44 +146,58 @@ class SamplingNInfectiousModel:
         else:
             imported_func = lambda t: 0
 
-        # set self variables
+        # set properties
         self.nb_groups = nb_groups
         self.nb_states = nb_states
         self.nb_samples = nb_samples
-        self.nb_infectious = 7
-        self.beta = baseline_beta
+        self.nb_infectious = 10  # for consistency with previous versions of the ASSA model
+
+        # beta proporties
+        self.beta = beta
         self.rel_beta_as = rel_beta_as
-        self.time_inc = time_inc
-        self.inf_as_prop = inf_as_prop
-        self.inf_m_prop = inf_m_prop
+        self.rel_lockdown_beta = rel_lockdown_beta
+        self.rel_postlockdown_beta = rel_postlockdown_beta
+
+        # proportion proporties
+        self.prop_as = prop_as
+        self.prop_m = prop_m
+        self.prop_s = prop_s
+        self.prop_s_to_h = prop_s_to_h
+        self.prop_h_to_c = prop_h_to_c
+        self.prop_h_to_d = prop_h_to_d
+        self.prop_h_to_r = prop_h_to_r
+        self.prop_c_to_d = prop_c_to_d
+
+        # time properties
+        self.time_inc = time_incubate
         self.time_infectious = time_infectious
         self.time_s_to_h = time_s_to_h
-        self.time_s_to_icu = time_s_to_icu
-        self.time_h_to_icu = time_h_to_icu
+        self.time_s_to_c = time_s_to_c
+        self.time_h_to_c = time_h_to_c
         self.time_h_to_r = time_h_to_r
-        self.time_icu_to_r = time_icu_to_r
-        self.time_icu_to_d = time_icu_to_d
-        self.hosp_icu_prop = hosp_icu_prop
-        self.hosp_icu_prop_adj = hosp_icu_prop_adj
-        self.s_hosp_prop = s_hosp_prop
-        self.icu_d_prop = icu_d_prop
+        self.time_h_to_d = time_h_to_d
+        self.time_c_to_r = time_c_to_r
+        self.time_c_to_d = time_c_to_d
+
+        # y0 properties
         self.y0 = y0
         self.n = n
 
-        self.f_hosp_icu_prop = f_hosp_icu_prop
-        self.f_icu_d_prop = f_icu_d_prop
-
+        # scalar properties
         self.scalar_vars = scalar_vars
         self.group_vars = group_vars
         self.sample_vars = sample_vars
 
+        # function properties
         self.infectious_func = infectious_func
         self.imported_func = imported_func
 
+        # private proporties relating to whether the model has been internally solved at least once
         self._solved = False
         self._t = None
         self.solution = None
 
+        # initialising proporties for use in the calculate_sir_posterior function
         self.resample_vars = None
         self.log_weights = None
         self.weights = None
@@ -158,28 +207,28 @@ class SamplingNInfectiousModel:
         s, e, i_as, i_m, i_s, i_i_h, i_i_icu, i_h, i_icu, _, _, _, _, _ = self._get_seird_from_flat_y(y)
 
         # get meta vars
-        inf_s_prop = 1 - self.inf_as_prop - self.inf_m_prop
+        inf_s_prop = 1 - self.prop_as - self.prop_m
         time_i_to_h = self.time_s_to_h - self.time_infectious
-        time_i_to_icu = self.time_s_to_icu - self.time_infectious
+        time_i_to_icu = self.time_s_to_c - self.time_infectious
 
 
         # solve seird equations
         ds = - 1 / self.n * self.infectious_func(t) * self.beta * np.sum(self.rel_beta_as * i_as + i_m + i_s, axis=1, keepdims=True) * s
         de = 1 / self.n * self.infectious_func(t) * self.beta * np.sum(self.rel_beta_as * i_as + i_m + i_s, axis=1, keepdims=True) * s - e / self.time_inc
-        di_as = self.inf_as_prop * e / self.time_inc - i_as / self.time_infectious
-        di_m = self.inf_m_prop * e / self.time_inc - i_m / self.time_infectious
+        di_as = self.prop_as * e / self.time_inc - i_as / self.time_infectious
+        di_m = self.prop_m * e / self.time_inc - i_m / self.time_infectious
         di_s = inf_s_prop * e / self.time_inc - i_s / self.time_infectious
-        di_i_h = self.s_hosp_prop * i_s / self.time_infectious - i_i_h / time_i_to_h
-        di_i_icu = (1 - self.s_hosp_prop) * i_s / self.time_infectious - i_i_icu / time_i_to_icu
-        di_h = i_i_h / time_i_to_h - self.f_hosp_icu_prop * i_h / self.time_h_to_icu - (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
-        di_icu = self.f_hosp_icu_prop * i_h / self.time_h_to_icu + i_i_icu / time_i_to_icu - self.f_icu_d_prop * i_icu / self.time_icu_to_d - (1 - self.f_icu_d_prop) * i_icu / self.time_icu_to_r
+        di_i_h = self.prop_s_to_h * i_s / self.time_infectious - i_i_h / time_i_to_h
+        di_i_icu = (1 - self.prop_s_to_h) * i_s / self.time_infectious - i_i_icu / time_i_to_icu
+        di_h = i_i_h / time_i_to_h - self.f_hosp_icu_prop * i_h / self.time_h_to_c - (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
+        di_icu = self.f_hosp_icu_prop * i_h / self.time_h_to_c + i_i_icu / time_i_to_icu - self.f_icu_d_prop * i_icu / self.time_c_to_d - (1 - self.f_icu_d_prop) * i_icu / self.time_c_to_r
         dr_as = i_as / self.time_infectious
         dr_m = i_m / self.time_infectious
         # dr_s = np.zeros((self.nb_samples, self.nb_groups))
         # dr_i = np.zeros((self.nb_samples, self.nb_groups))
         dr_h = (1 - self.f_hosp_icu_prop) * i_h / self.time_h_to_r
-        dr_icu = (1 - self.f_icu_d_prop) * i_icu / self.time_icu_to_r
-        dd_icu = self.f_icu_d_prop * i_icu / self.time_icu_to_d
+        dr_icu = (1 - self.f_icu_d_prop) * i_icu / self.time_c_to_r
+        dd_icu = self.f_icu_d_prop * i_icu / self.time_c_to_d
 
         dydt = np.concatenate([
             ds.reshape(self.nb_samples, self.nb_groups, 1),

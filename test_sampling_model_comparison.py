@@ -65,21 +65,21 @@ if __name__ == '__main__':
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
-        baseline_beta=r0 / time_infectious,
+        beta=r0 / time_infectious,
         rel_lockdown_beta=np.random.uniform(0.55, 0.65, size=(nb_samples, 1)),
         rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
         rel_beta_as=0.5,
-        time_inc=5.1,
-        inf_as_prop=0.75,
-        inf_m_prop=(1 - 0.75) * 0.1,
+        time_incubate=5.1,
+        prop_as=0.75,
+        prop_m=(1 - 0.75) * 0.1,
         time_infectious=time_infectious,
         time_s_to_h=6,
-        time_h_to_icu=8,
+        time_h_to_c=8,
         time_h_to_r=10,
-        time_icu_to_r=10,
-        time_icu_to_d=6,
-        hosp_icu_prop=0.2133,
-        icu_d_prop=0.6,
+        time_c_to_r=10,
+        time_c_to_d=6,
+        prop_h_to_c=0.2133,
+        prop_c_to_d=0.6,
         y0=y0
     )
     logging.info('Solving system')
