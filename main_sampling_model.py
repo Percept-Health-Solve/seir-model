@@ -142,16 +142,16 @@ def load_data():
     # df_merge = df_merge[df_merge['WC_confirmed'] > 500]
     # df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
     # df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 15]
+    df_merge = df_merge[df_merge['WC_deaths'] > 5]
     logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
 
     t = df_merge['Day'].to_numpy()
-    i_h_obs = df_merge['Current hospitalisations']
-    i_icu_obs = df_merge['Current ICU']
-    i_d_obs = df_merge['WC_confirmed']
-    d_icu_obs = df_merge['WC_deaths']
+    i_d_obs = df_merge['WC_confirmed'].to_numpy()
+    i_h_obs = df_merge['Current hospitalisations'].to_numpy()
+    i_icu_obs = df_merge['Current ICU'].to_numpy()
+    d_icu_obs = df_merge['WC_deaths'].to_numpy()
 
-    return t, i_h_obs, i_icu_obs, i_d_obs, d_icu_obs
+    return t, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs
 
 
 if __name__ == '__main__':
@@ -161,12 +161,12 @@ if __name__ == '__main__':
 
     nb_groups = 1
     nb_samples = 2000000
-    ratio_resample = 0.02
+    ratio_resample = 0.05
 
     r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
     time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
     e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
-    hosp_icu_prop = 0.2133
+    hosp_icu_prop = np.random.uniform(0.18, 0.24, size=(nb_samples, 1))  # 0.2133
 
     y0 = np.zeros((nb_samples, nb_groups, 14))
     y0[:, :, 0] = 7000000 - e0
@@ -174,13 +174,14 @@ if __name__ == '__main__':
     y0 = y0.reshape(-1)
     t0 = -50
 
-    inf_as_prop = np.random.uniform(0.7, 0.9, size=(nb_samples, 1))
+    inf_as_prop = np.random.uniform(0.4, 0.9, size=(nb_samples, 1))
+    rel_lockdown_beta = np.random.uniform(0, 1, size=(nb_samples, 1))
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
         baseline_beta=r0/time_infectious,
-        rel_lockdown_beta=np.random.uniform(0, 1, size=(nb_samples, 1)),
-        rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
+        rel_lockdown_beta=rel_lockdown_beta,
+        rel_postlockdown_beta=0.8,
         rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
         time_inc=5.1,
         inf_as_prop=inf_as_prop,
@@ -194,7 +195,7 @@ if __name__ == '__main__':
         time_icu_to_d=12,
         s_hosp_prop=np.random.uniform(1-hosp_icu_prop+0.01, 1, size=(nb_samples, 1)),
         hosp_icu_prop=hosp_icu_prop,
-        icu_d_prop=0.6,
+        icu_d_prop=np.random.uniform(0.5, 1, size=(nb_samples, 1)),
         y0=y0
     )
 
