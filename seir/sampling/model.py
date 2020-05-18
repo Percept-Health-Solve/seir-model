@@ -11,6 +11,8 @@ import logging
 
 class SamplingNInfectiousModel:
 
+    nb_states = 18
+
     def __init__(self,
                  nb_groups: int,
                  beta=None,
@@ -69,8 +71,8 @@ class SamplingNInfectiousModel:
         prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
         prop_c_to_r = 1 - prop_c_to_d
 
-        time_i_to_h = time_infectious - time_s_to_h
-        time_i_to_c = time_infectious - time_s_to_c
+        time_i_to_h = time_s_to_h - time_infectious
+        time_i_to_c = time_s_to_c - time_infectious
 
 
         # collect variables into specific dictionaries
@@ -88,8 +90,7 @@ class SamplingNInfectiousModel:
             'prop_s_to_h': prop_s_to_h,
             'prop_h_to_c': prop_h_to_c,
             'prop_h_to_d': prop_h_to_d,
-            'prop_c_to_d': prop_c_to_d,
-            'prop_c_to_r': prop_c_to_r
+            'prop_c_to_d': prop_c_to_d
         }
 
         time_vars = {
@@ -119,7 +120,7 @@ class SamplingNInfectiousModel:
             assert np.all(beta >= 0), f"Value in '{key}' is smaller than 0"
         for key, value in prop_vars.items():
             assert np.all(value <= 1), f"Value in proportion '{key}' is greater than 1"
-            assert np.all(value >= 1), f"Value in proportion '{key}' is smaller than 0"
+            assert np.all(value >= 0), f"Value in proportion '{key}' is smaller than 0"
         for key, value in time_vars.items():
             assert np.all(value > 0), f"Value in time '{key}' is smaller than or equal to 0"
 
@@ -136,9 +137,8 @@ class SamplingNInfectiousModel:
         assert np.all(time_i_to_h > 0), "Value in time 'time_i_to_h' is smaller than or equal to 0"
         assert np.all(time_i_to_c > 0), "Value in time 'time_i_to_c' is smaller than or equal to 0"
 
-
         # intrinsic parameter measuring the number of internal states of which to keep track
-        nb_states = 18
+        nb_states = SamplingNInfectiousModel.nb_states
 
         # detect the number of given samples, check for consistency, and assert the shapes of the parameters
         nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
@@ -158,7 +158,7 @@ class SamplingNInfectiousModel:
 
         logging.info(f'Calculated scalar variables: {list(calculated_scalar_vars.keys())}')
         logging.info(f'Calculated group variables: {list(calculated_group_vars.keys())}')
-        logging.info(f'Calculated sampled variables: {list(calculated_group_vars.keys())}')
+        logging.info(f'Calculated sampled variables: {list(calculated_sample_vars.keys())}')
 
         # check if y0 shape is correct
         y0 = np.asarray(y0)
@@ -255,6 +255,8 @@ class SamplingNInfectiousModel:
         self.calculated_resample_vars = None
         self.log_weights = None
         self.weights = None
+        self.nb_resamples = None
+        self.resample_indices = None
 
     def _ode(self, y, t):
         # get seird
@@ -277,8 +279,8 @@ class SamplingNInfectiousModel:
         dh_c = self.prop_h_to_c * i_h / self.time_i_to_h - h_c / self.time_h_to_c
         dh_d = self.prop_h_to_d * i_h / self.time_i_to_h - h_d / self.time_h_to_d
 
-        dc_r = self.prop_c_to_r * h_c / self.time_h_to_c - c_r / self.time_c_to_r
-        dc_d = self.prop_c_to_d * h_c / self.time_h_to_c - c_d / self.time_c_to_d
+        dc_r = self.prop_c_to_r * (h_c / self.time_h_to_c + i_c / self.time_i_to_c) - c_r / self.time_c_to_r
+        dc_d = self.prop_c_to_d * (h_c / self.time_h_to_c + i_c / self.time_i_to_c) - c_d / self.time_c_to_d
 
         dr_a = i_a / self.time_infectious
         dr_m = i_m / self.time_infectious
@@ -297,8 +299,6 @@ class SamplingNInfectiousModel:
             di_s.reshape(self.nb_samples, self.nb_groups, 1),
             di_h.reshape(self.nb_samples, self.nb_groups, 1),
             di_c.reshape(self.nb_samples, self.nb_groups, 1),
-            di_h.reshape(self.nb_samples, self.nb_groups, 1),
-            di_c.reshape(self.nb_samples, self.nb_groups, 1),
             dh_r.reshape(self.nb_samples, self.nb_groups, 1),
             dh_c.reshape(self.nb_samples, self.nb_groups, 1),
             dh_d.reshape(self.nb_samples, self.nb_groups, 1),
@@ -314,7 +314,7 @@ class SamplingNInfectiousModel:
 
         return dydt
 
-    def solve(self, t, y0=None, return_as_seird: bool = True):
+    def solve(self, t, y0=None, return_as_seird: bool = True, exclude_t0: bool = False):
         y0 = self.y0 if y0 is None else y0
         if not self._solved:
             y = odeint(self._ode, y0, t).reshape(-1, self.nb_samples, self.nb_groups, self.nb_states).clip(min=0)
@@ -328,6 +328,9 @@ class SamplingNInfectiousModel:
                 self._solution = y
             else:
                 y = self._solution
+
+        if exclude_t0:
+            y = y[1:]
 
         if return_as_seird:
             s = y[:, :, :, 0]
@@ -352,7 +355,8 @@ class SamplingNInfectiousModel:
         return y
 
     def calculate_sir_posterior(self,
-                                t,
+                                t0,
+                                t_obs,
                                 det_obs=None,
                                 h_obs=None,
                                 c_obs=None,
@@ -367,23 +371,20 @@ class SamplingNInfectiousModel:
         m = int(np.round(self.nb_samples * ratio_resample))
 
         # cast variables
-        t = np.asarray(t)
+        t0 = np.asarray(t0)
+        t_obs = np.asarray(t_obs)
         det_obs = None if det_obs is None else np.asarray(det_obs).reshape(-1, 1, 1).astype(int)
         h_obs = None if h_obs is None else np.asarray(h_obs).reshape(-1, 1, 1).astype(int)
         c_obs = None if c_obs is None else np.asarray(c_obs).reshape(-1, 1, 1).astype(int)
         deaths_obs = None if deaths_obs is None else np.asarray(deaths_obs).reshape(-1, 1, 1).astype(int)
 
         # assert shapes
-        # TODO: Implement linear interpolation for cases where t does not directly match the data
-        # TODO: Implement checks for when data is group specific
+        assert t0.ndim == 0, "t0 should be a scalar, not a vector"
 
-        # assert det_obs.ndim == 1 and det_obs.size == t.size, "Observed detected cases does not match time size"
-        # assert h_obs.ndim == 1 and h_obs.size == t.size, "Observed hospital cases does not match time size"
-        # assert c_obs.ndim == 1 and c_obs.size == t.size, "Observed ICU cases does not match time size"
-        # assert deaths_obs.ndim == 1 and deaths_obs.size == t.size, "Observed deaths does not match time size"
+        t = np.append(t0, t_obs)
 
         logging.info('Solving system')
-        s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c = self.solve(t, y0)
+        s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c = self.solve(t, y0, exclude_t0=True)
 
         detected = calculate_detected_cases(infected_asymptomatic=i_a,
                                             infected_mild=i_m,
@@ -401,6 +402,9 @@ class SamplingNInfectiousModel:
         log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_r + h_c + h_d)
         log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_r + c_d)
         log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_h + d_c)
+
+        # Free up memory at this point
+        del s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c
 
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
         weights = softmax(log_weights/smoothing)
@@ -434,6 +438,8 @@ class SamplingNInfectiousModel:
         self.calculated_resample_vars = calculated_resample_vars
         self.log_weights = log_weights
         self.weights = weights
+        self.nb_resamples = m
+        self.resample_indices = resample_indices
 
     def _get_seird_from_flat_y(self, y, return_removed=True):
         y = y.reshape(self.nb_samples, self.nb_groups, self.nb_states)

@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import scipy.stats as st
 import pandas as pd
@@ -10,76 +12,39 @@ import seaborn as sns
 from seir.sampling.model import SamplingNInfectiousModel
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s -- %(message)s', datefmt='%H:%M:%S %p')
 
 
-def check_priors_plot(model):
-    tt = np.arange(t0, 50).astype(int)
-    y = model.solve(tt)
+def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
+    nb_groups = model.nb_groups
+    scalar_vars = model.scalar_vars
+    group_vars = model.group_vars
+    sample_vars = model.sample_vars
+    resample_vars = model.resample_vars
+    log_weights = model.log_weights
 
-    i_as = y[:, :, :, 2]
-    i_m = y[:, :, :, 3]
-    i_s = y[:, :, :, 4]
-    i_i = y[:, :, :, 5]
-    i_h = y[:, :, :, 6]
-    i_icu = y[:, :, :, 7]
-    r_as = y[:, :, :, 8]
-    r_m = y[:, :, :, 9]
-    r_h = y[:, :, :, 10]
-    r_icu = y[:, :, :, 11]
-    d_icu = y[:, :, :, 12]
+    nb_samples = model.nb_samples
+    nb_resamples = model.nb_resamples
 
-    ratio_as_detected = 0
-    ratio_m_detected = 0.3
-    ratio_s_detected = 1
-
-    cum_detected_samples = ratio_as_detected * (i_as + r_as) + ratio_m_detected * (i_m + r_m) \
-                           + ratio_s_detected * (i_s + i_i + i_h + i_icu + r_h + r_icu + d_icu)
-
-    det_mean = np.mean(cum_detected_samples, axis=1)
-    det_lc, det_hc = st.t.interval(0.95, len(cum_detected_samples) - 1, loc=det_mean, scale=st.sem(cum_detected_samples, axis=1))
-
-    d_icu_mean = np.mean(d_icu, axis=1)
-    d_lc, d_hc = st.t.interval(0.95, len(d_icu_mean) - 1, loc=d_icu_mean, scale=st.sem(d_icu, axis=1))
-
-    fig, ax = plt.subplots(1, 4, figsize=(12, 3))
-    ax = ax.flat
-    ax[0].plot(tt, det_mean[:, 0])
-    ax[0].fill_between(tt, det_lc[:, 0], det_hc[:, 0], color='C0', alpha=0.1)
-    ax[0].plot(tt, cum_detected_samples[:, :, 0], c='k', alpha=0.005)
-    ax[0].plot(t, i_d_obs)
-    ax[0].set_ylim((-1, 4000))
-
-    ax[1].plot(tt, i_h[:, :, 0], c='k', alpha=0.005)
-    ax[1].plot(t, i_h_obs)
-    ax[1].set_ylim((-1, 200))
-
-    ax[2].plot(tt, i_icu[:, :, 0], c='k', alpha=0.005)
-    ax[2].plot(t, i_icu_obs)
-    ax[2].set_ylim((-1, 200))
-
-    ax[3].plot(tt, d_icu_mean[:, 0])
-    ax[3].fill_between(tt, d_lc[:, 0], d_hc[:, 0], color='C0', alpha=0.1)
-    ax[3].plot(tt, d_icu[:, :, 0], c='k', alpha=0.005)
-    ax[3].plot(t, d_icu_obs)
-    ax[3].set_ylim((-1, 1000))
-
-    plt.tight_layout()
-    plt.show()
-
-
-def save_vars_to_csv(resample_vars: dict, scalar_vars: dict, group_vars: dict, nb_groups, nb_samples, base='data/samples'):
-    logging.info(f'Saving variables to {base}_*.csv for {nb_groups} groups and {nb_samples} samples')
+    logging.info(f'Saving model variables to {base}_*.csv')
+    # need to reshape sample vars
+    reshaped_sample_vars = {}
+    for key, value in sample_vars.items():
+        reshaped_sample_vars[key] = value.reshape(-1)
+    reshaped_sample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
     # need to reshape resample vars
     reshaped_resample_vars = {}
     for key, value in resample_vars.items():
         reshaped_resample_vars[key] = value.reshape(-1)
-    reshaped_resample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
+    reshaped_resample_vars['group'] = np.asarray([[i] * nb_resamples for i in range(nb_groups)]).reshape(-1)
 
-    # define df
+    # define dfs
+    df_sample = pd.DataFrame(reshaped_sample_vars)
+    df_sample['log_weights'] = log_weights
     df_resample = pd.DataFrame(reshaped_resample_vars)
 
     # save files
+    df_sample.to_csv(f"{base}_sample.csv", index=False)
     df_resample.to_csv(f"{base}_resample.csv", index=False)
     with open(f'{base}_scalar.pkl', 'wb') as f:
         pickle.dump(scalar_vars, f)
@@ -157,103 +122,130 @@ def load_data():
 if __name__ == '__main__':
 
     # get data
-    t, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data()
+    t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data()
 
-    nb_groups = 1
-    nb_samples = 2000000
-    ratio_resample = 0.05
+    nb_runs = 5
+    for run in range(1, nb_runs):
+        logging.info(f'Executing run {run}')
 
-    r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
-    time_infectious = np.random.uniform(1.5, 4, size=(nb_samples, 1))
-    e0 = np.random.uniform(0.5, 5, size=(nb_samples, 1))
-    hosp_icu_prop = np.random.uniform(0.18, 0.24, size=(nb_samples, 1))  # 0.2133
+        nb_groups = 1
+        nb_samples = 1000000
+        ratio_resample = 0.05
 
-    y0 = np.zeros((nb_samples, nb_groups, 14))
-    y0[:, :, 0] = 7000000 - e0
-    y0[:, :, 1] = e0
-    y0 = y0.reshape(-1)
-    t0 = -50
+        r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
+        time_infectious = np.random.uniform(2, 2.6, size=(nb_samples, 1))
+        e0 = np.random.uniform(0.001, 5, size=(nb_samples, 1))
+        prop_a = np.random.uniform(0.6, 0.9, size=(nb_samples, 1))
+        rel_lockdown_beta = np.random.uniform(0, 1, size=(nb_samples, 1))
 
-    inf_as_prop = np.random.uniform(0.4, 0.9, size=(nb_samples, 1))
-    rel_lockdown_beta = np.random.uniform(0, 1, size=(nb_samples, 1))
+        y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
+        y0[:, :, 0] = 7000000 - e0
+        y0[:, :, 1] = e0
+        y0 = y0.reshape(-1)
+        t0 = -50
 
-    model = SamplingNInfectiousModel(
-        nb_groups=nb_groups,
-        beta=r0 / time_infectious,
-        rel_lockdown_beta=rel_lockdown_beta,
-        rel_postlockdown_beta=0.8,
-        rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
-        time_incubate=5.1,
-        prop_a=inf_as_prop,
-        prop_m=(1 - inf_as_prop) * np.random.beta(a=10, b=1, size=(nb_samples, 1)),
-        time_infectious=time_infectious,
-        time_s_to_h=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
-        time_s_to_c=np.random.uniform(4.5, 8, size=(nb_samples, 1)),
-        time_h_to_c=10,
-        time_h_to_r=7,
-        time_c_to_r=16,
-        time_c_to_d=12,
-        prop_s_to_h=np.random.uniform(1 - hosp_icu_prop + 0.01, 1, size=(nb_samples, 1)),
-        prop_h_to_c=hosp_icu_prop,
-        prop_c_to_d=np.random.uniform(0.5, 1, size=(nb_samples, 1)),
-        y0=y0
-    )
+        model = SamplingNInfectiousModel(
+            nb_groups=nb_groups,
+            beta=r0 / time_infectious,
+            rel_lockdown_beta=rel_lockdown_beta,
+            rel_postlockdown_beta=0.8,
+            rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
+            prop_a=prop_a,
+            prop_m=(1 - prop_a) * 0.957,  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
+            prop_s_to_h=np.random.uniform(0.8, 0.95, size=(nb_samples, 1)),
+            prop_h_to_c=np.random.beta(34, 191, size=(nb_samples, 1)),
+            prop_h_to_d=np.random.beta(41, 150, size=(nb_samples, 1)),
+            prop_c_to_d=np.random.beta(20, 14, size=(nb_samples, 1)),
+            time_incubate=5.1,
+            time_infectious=time_infectious,
+            time_s_to_h=6,
+            time_s_to_c=6,
+            time_h_to_c=10,
+            time_h_to_r=9.8,
+            time_h_to_d=11.1,
+            time_c_to_r=18.1,
+            time_c_to_d=17.2,
+            y0=y0
+        )
 
-    # get y_t.min() from y0
-    logging.info('Solving for y at minimum data time')
-    tt = np.linspace(t0, t.min(), 20)
-    y_tmin = model.solve(tt)[-1]
-    y_tmin = y_tmin.reshape(-1)
+        # get y_t.min() from y0
+        # logging.info('Solving for y at minimum data time')
+        # tt = np.linspace(t0, t_obs.min(), 20)
+        # y_tmin = model.solve(tt)[-1]
+        # y_tmin = y_tmin.reshape(-1)
 
-    # check if priors match the data
-    # check_priors_plot(model)
+        # fit to data
 
-    # fit to data
+        ratio_as_detected = 0
+        ratio_m_detected = 0.3
+        ratio_s_detected = 1
 
-    ratio_as_detected = 0
-    ratio_m_detected = 0.3
-    ratio_s_detected = 1
+        model.calculate_sir_posterior(t0, t_obs, None, i_h_obs, i_icu_obs, d_icu_obs,
+                                      ratio_as_detected=ratio_as_detected,
+                                      ratio_m_detected=ratio_m_detected,
+                                      ratio_s_detected=ratio_s_detected,
+                                      ratio_resample=ratio_resample,
+                                      smoothing=1)
 
-    model.calculate_sir_posterior(t, None, i_h_obs, i_icu_obs, d_icu_obs, y0=y_tmin,
-                                  ratio_as_detected=ratio_as_detected,
-                                  ratio_m_detected=ratio_m_detected,
-                                  ratio_s_detected=ratio_s_detected,
-                                  ratio_resample=ratio_resample,
-                                  smoothing=1)
+        sample_vars = model.sample_vars
+        resample_vars = model.resample_vars
+        scalar_vars = model.scalar_vars
+        group_vars = model.group_vars
 
-    sample_vars = model.sample_vars
-    resample_vars = model.resample_vars
-    scalar_vars = model.scalar_vars
-    group_vars = model.group_vars
+        calc_sample_vars = model.calculated_sample_vars
+        calc_resample_vars = model.calculated_resample_vars
 
-    e0_resample = e0[np.random.choice(nb_samples, int(ratio_resample*nb_samples), p=model.weights)]
+        sample_vars['e0'] = e0
+        e0_resample = e0[model.resample_indices]  # TODO: Make y0 resampling a thing
 
-    # add e0 and t0 manually
-    # TODO: Let the model accept initial parameters as potential random variables
-    scalar_vars['t0'] = t0
-    sample_vars['e0'] = e0
-    sample_vars['r0'] = r0
-    resample_vars['e0'] = e0_resample
-    resample_vars['r0'] = resample_vars['time_infectious'] * resample_vars['beta']
+        resample_vars['e0'] = e0_resample
+        scalar_vars['t0'] = t0
 
-    # save variables
-    save_vars_to_csv(resample_vars, scalar_vars, group_vars, nb_groups, int(ratio_resample * nb_samples))
+        # save variables
+        save_vars_to_csv(model, base=f'data/sampling-runs/run{run:02}')
 
-    logging.info('Plotting prior and posterior distributions')
-    fig, axes = plt.subplots(3, 5, figsize=(11, 7))
-    i = 0
-    axes = axes.flat
-    for key, value in resample_vars.items():
-        # TODO: plot variables for multiple groups
-        print(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
-        sns.distplot(value[:, 0], ax=axes[i], color='C0')
-        sns.distplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
-        axes[i].set_title(key)
-        i += 1
 
-    plt.tight_layout()
-    fig.savefig('data/priors_posterior.png')
-    plt.show()
+        # plot variables of interest
+        logging.info('Plotting prior and posterior distributions')
+        sns.set(style='darkgrid')
+        fig, axes = plt.subplots(4, 5, figsize=(11, 11))
+        i = 0
+        axes = axes.flat
+        # reshape to a dataframe for pair plotting
+        reshaped_resample_vars = {}
+        for key, value in resample_vars.items():
+            reshaped_resample_vars[key] = value.reshape(-1)
+        reshaped_resample_vars['group'] = np.asarray([[i] * model.nb_resamples for i in range(nb_groups)]).reshape(-1)
+        df_resample = pd.DataFrame(reshaped_resample_vars)
+        try:
+            for key, value in resample_vars.items():
+                # TODO: plot variables for multiple groups
+                logging.info(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
+                sns.distplot(value[:, 0], ax=axes[i], color='C0')
+                sns.distplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
+                axes[i].set_title(key)
+                i += 1
+            logging.info('Adding calculated variables')
+            for key, value in calc_resample_vars.items():
+                logging.info(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
+                sns.distplot(value[:, 0], ax=axes[i], color='C0')
+                sns.distplot(calc_sample_vars[key][:, 0], ax=axes[i], color='C1')
+                axes[i].set_title(key)
+                i += 1
+        except:
+            logging.warning(f'Plotting failed for run {run} - likely due to posterior collapse')
+
+
+        plt.tight_layout()
+        fig.savefig(f'data/sampling-runs/run{run:02}_priors_posterior.png')
+        g = sns.PairGrid(df_resample, corner=True, hue="group")
+
+        logging.info('Building joint distribution plot')
+        g = g.map_lower(sns.kdeplot, colors='C0')
+        g = g.map_diag(sns.distplot)
+        g.savefig(f'data/sampling-runs/run{run:02}_joint_posterior.png')
+
+        del model, fig, g
 
 
 
