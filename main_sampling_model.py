@@ -16,7 +16,7 @@ from seir.sampling.model import SamplingNInfectiousModel
 parser = argparse.ArgumentParser()
 parser.add_argument('--nb_samples', type=int, default=1000000, help='Number of initial samples per run')
 parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proportion of resamples per run')
-parser.add_argument('--model_dir', type=str, default='data/', help='Base directory in which to save files')
+parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
 parser.add_argument('--nb_runs', type=int, default=1, help='Number of runs to perform')
 parser.add_argument('--fit_detected', action='store_true', help='Fits the model to detected data')
@@ -67,19 +67,25 @@ def main():
     # load data
     t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data()
 
-        d_icu_obs = None
+    detected_fit = i_d_obs if args.fit_detected else None
+    h_fit = i_h_obs if args.fit_hospitalised else None
     icu_fit = i_icu_obs if args.fit_icu else None
     deaths_fit = d_icu_obs if args.fit_deaths else None
 
     # define the build_and_solve_model function without the output directory
     _build_and_solve_model = lambda save_dir: build_and_solve_model(t_obs,
-                                                                    d_icu_obs,
+                                                                    detected_fit,
+                                                                    h_fit,
+                                                                    icu_fit,
+                                                                    deaths_fit,
                                                                     nb_samples=args.nb_samples,
                                                                     ratio_resample=args.ratio_resample,
                                                                     prop_as_range=args.prop_as_range,
+                                                                    model_base=save_dir)
 
     if args.nb_runs > 1:
         for run in range(args.nb_runs):
+            model_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
             logging.info(f'Executing run {run + 1}')
             _build_and_solve_model(model_base)
             calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, model_base=model_base)
@@ -497,6 +503,16 @@ def calculate_resample(t_obs,
             summary_stats[f'{titles[i]}_97.5CI'] = high.reshape(-1)
 
     plt.tight_layout()
+    plt.savefig(f'{model_base}_prediction.png')
+    plt.clf()
+
+    logging.info('Saving summary stats')
+    groups = np.asarray([[i] * len(tt) for i in range(nb_groups)]).reshape(-1)
+    summary_stats['group'] = groups
+    df_stats = pd.DataFrame(summary_stats)
+    df_stats.insert(0, 'Date', tt_date)
+    print(df_stats.head())
+    df_stats.to_csv(f'{model_base}_prediction.csv', index=False)
 
 
 def _uniform_from_range(range, size=(1,)):
