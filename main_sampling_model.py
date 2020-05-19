@@ -1,7 +1,9 @@
+import logging
+import argparse
+import datetime
 from pathlib import Path
 
 import numpy as np
-import scipy.stats as st
 import pandas as pd
 
 import pickle
@@ -11,14 +13,11 @@ import seaborn as sns
 
 from seir.sampling.model import SamplingNInfectiousModel
 
-import logging
-import argparse
-from typing import List
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nb_samples', type=int, default=1000000, help='Number of initial samples per run')
 parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proportion of resamples per run')
-parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
+parser.add_argument('--model_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
 parser.add_argument('--nb_runs', type=int, default=1, help='Number of runs to perform')
 parser.add_argument('--fit_detected', action='store_true', help='Fits the model to detected data')
@@ -87,7 +86,7 @@ def main():
                                                                     nb_samples=args.nb_samples,
                                                                     ratio_resample=args.ratio_resample,
                                                                     prop_as_range=args.prop_as_range,
-                                                                    output_dir=save_dir)
+                                                                    model_dir=save_dir)
 
     if args.nb_runs > 1:
         for run in range(args.nb_runs):
@@ -105,7 +104,7 @@ def build_and_solve_model(t_obs,
                           nb_groups: int = 1,
                           nb_samples: int = 1000000,
                           ratio_resample: float = 0.05,
-                          output_dir: Path = Path('data/model'),
+                          model_dir: Path = Path('data/model'),
                           prop_as_range=None):
     if prop_as_range is None:
         prop_as_range = [0.6, 0.9]
@@ -182,7 +181,7 @@ def build_and_solve_model(t_obs,
     scalar_vars['t0'] = t0
 
     # save variables
-    save_vars_to_csv(model, base=output_dir)
+    save_vars_to_csv(model, base=model_dir)
 
     # plot variables of interest
     logging.info('Plotting prior and posterior distributions')
@@ -215,14 +214,14 @@ def build_and_solve_model(t_obs,
         logging.warning(f'Plotting of priors and posteriors failed due to posterior collapse')
 
     plt.tight_layout()
-    fig.savefig(f'{output_dir}_priors_posterior.png')
+    fig.savefig(f'{model_dir}_priors_posterior.png')
 
     logging.info('Building joint distribution plot')
     g = sns.PairGrid(df_resample, corner=True, hue="group")
     try:
         g = g.map_lower(sns.kdeplot, colors='C0')
         g = g.map_diag(sns.distplot)
-        g.savefig(f'{output_dir}_joint_posterior.png')
+        g.savefig(f'{model_dir}_joint_posterior.png')
     except np.linalg.LinAlgError:
         logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
 
@@ -266,7 +265,7 @@ def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
         pickle.dump(group_vars, f)
 
 
-def load_data():
+def load_data(remove_small: bool = True):
     # get data
     logging.info('Loading data')
     df_deaths = pd.read_csv(
@@ -279,18 +278,19 @@ def load_data():
         parse_dates=['date'],
         date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
     )
-    df_hosp_icu = pd.read_csv('data/WC_hosp_icu.csv',
-                              parse_dates=['Date'],
-                              date_parser=lambda t: pd.to_datetime(t, format='%d/%m/%Y'))
+    df_hosp_icu = pd.read_csv('data/WC_data.csv',
+                              parse_dates=['date'],
+                              date_parser=lambda t: pd.to_datetime(t, format='%Y-%m-%d'))
 
     df_deaths = df_deaths.sort_values('date')
     df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('Date')
 
     logging.info('Taking intersection of dates in all dataframes')
-    max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['Date'].max()])
+    max_date = np.min([df_confirmed['date'].max(), df_hosp_icu['Date'].max()])
     logging.info(f'Maximum date at which all data sources had data: {max_date}')
     df_confirmed = df_confirmed[df_confirmed['date'] < max_date]
+    df_hosp_icu = df_hosp_icu[df_hosp_icu['date'] < max_date]
 
     df_deaths = df_deaths[['date', 'WC']]
     df_confirmed = df_confirmed[['date', 'WC']]
@@ -301,34 +301,32 @@ def load_data():
     logging.info('Setting date of lockdown 2020-03-27 to day 0')
     df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
     df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
-    df_hosp_icu['Day'] = (df_hosp_icu['Date'] - pd.to_datetime('2020-03-27')).dt.days
+    df_hosp_icu['Day'] = (df_hosp_icu['date'] - pd.to_datetime('2020-03-27')).dt.days
 
     logging.info('Merging data sources')
     df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
     df_merge = df_merge.merge(df_hosp_icu, on='Day', how='left')
     df_merge = df_merge.interpolate(method='linear')
     df_merge = df_merge[
-        ['date_confirmed', 'WC_confirmed', 'WC_deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
+        ['date_confirmed', 'WC_confirmed', 'Cum Deaths', 'Current hospitalisations', 'Current ICU', 'Day']]
     df_merge = df_merge.fillna(0)
 
     logging.info('Casting data')
     df_merge['WC_confirmed'] = df_merge['WC_confirmed'].astype(int)
-    df_merge['WC_deaths'] = df_merge['WC_deaths'].astype(int)
+    df_merge['Cum Deaths'] = df_merge['Cum Deaths'].astype(int)
     df_merge['Day'] = df_merge['Day'].astype(int)
 
     # remove small observations
-    logging.info('Filtering out data that contains small counts (as not to bias the poisson model)')
-    # df_merge = df_merge[df_merge['WC_confirmed'] > 500]
-    # df_merge = df_merge[df_merge['Current hospitalisations'] > 20]
-    # df_merge = df_merge[df_merge['Current ICU'] > 20]
-    df_merge = df_merge[df_merge['WC_deaths'] > 5]
-    logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
+    if remove_small:
+        logging.info('Filtering out data that contains small counts (as not to bias the poisson model)')
+        df_merge = df_merge[df_merge['Cum Deaths'] > 5]
+        logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
 
     t = df_merge['Day'].to_numpy()
     i_d_obs = df_merge['WC_confirmed'].to_numpy()
     i_h_obs = df_merge['Current hospitalisations'].to_numpy()
     i_icu_obs = df_merge['Current ICU'].to_numpy()
-    d_icu_obs = df_merge['WC_deaths'].to_numpy()
+    d_icu_obs = df_merge['Cum Deaths'].to_numpy()
 
     return t, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs
 
