@@ -526,7 +526,7 @@ def _determine_sample_vars(vars: dict, nb_groups):
                 else:
                     sample_vars[key] = value
         else:
-            raise ValueError(f'Variable {key} has too many dimension. Should be 0 or 2, got {value.ndims}')
+            raise ValueError(f'Variable {key} has too many dimension. Should be 0 or 2, got {value.ndim}')
 
     if not nb_samples:
         nb_samples = 1
