@@ -4,14 +4,15 @@ import datetime
 import matplotlib.pyplot as plt 
 
 # read data
-df = pd.read_excel('data/202005 WCDoH Covid19 admissions data.xlsx',sheet_name='WC Covid19 Admissions')
+df = pd.read_csv('data/202005 WCDoH Covid19 admissions data v3.csv',
+                 parse_dates=['date_of_diagnosis','Admission_date','discharge_date','Date_of_ICU_admission'])
 for col in ['date_of_diagnosis','Admission_date','discharge_date','Date_of_ICU_admission']:
     df[col] = [x.date() for x in df[col]]
 
 def hosp_indic(row,hosp_date):
     icu = 0
     hosp = 0
-    if row['Admitted_to_ICU'] == 'Yes' and hosp_date >= row['Date_of_ICU_admission']and (pd.isna(row['discharge_date']) or row['discharge_date'] >= hosp_date):
+    if row['Admitted_to_ICU'] == 'Yes' and hosp_date >= row['Date_of_ICU_admission'] and (pd.isna(row['discharge_date']) or row['discharge_date'] >= hosp_date):
         icu = 1
     if hosp_date >= row['Admission_date'] and (pd.isna(row['discharge_date']) or row['discharge_date'] >= hosp_date):
         hosp = 1 - icu
