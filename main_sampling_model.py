@@ -19,10 +19,12 @@ parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proporti
 parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
 parser.add_argument('--nb_runs', type=int, default=1, help='Number of runs to perform')
-parser.add_argument('--fit_detected', action='store_true', help='Fits the model to detected data')
-parser.add_argument('--fit_hospitalised', action='store_true', help='Fits the model to detected data')
-parser.add_argument('--fit_icu', action='store_true', help='Fits the model to detected data')
-parser.add_argument('--fit_deaths', action='store_true', help='Fits the model to death data')
+parser.add_argument('--fit_detected', action='store_true', help='Fit the model to detected data')
+parser.add_argument('--fit_hospitalised', action='store_true', help='Fit the model to detected data')
+parser.add_argument('--fit_icu', action='store_true', help='Fit the model to detected data')
+parser.add_argument('--fit_deaths', action='store_true', help='Fit the model to death data')
+parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to 'WC' or 'national' data")
+parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
 parser.add_argument('--prop_as_range', type=float, default=[0.6, 0.9], nargs=2,
                     help='Lower and upper bounds for the prop_as uniform distribution')
@@ -32,6 +34,14 @@ def main():
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
+
+    if args.load_prior_file:
+        load_prior_file = Path(args.load_prior_file)
+        # check if prior file is a file
+        if not load_prior_file.is_file():
+            raise ValueError(f"Given prior file '{args.load_prior_file}' is not a file or does not exist.")
+    else:
+        load_prior_file = None
 
     # check output directory
     if not output_dir.is_dir():
@@ -59,13 +69,21 @@ def main():
         logging.warning(f"Fitting to {'detected, ' if args.fit_detected else ''}"
                         f"{'hospitalised, ' if args.fit_hospitalised else ''}"
                         f"{'ICU, ' if args.fit_icu else ''}"
-                        f"{'and, ' if args.fit_detected or args.fit_hospitalised or args.fit_icu else ''}"
+                        f"{'and ' if args.fit_detected or args.fit_hospitalised or args.fit_icu else ''}"
                         f"{'death' if args.fit_deaths else ''} cases")
     else:
         raise ValueError(f'Not fitting to any data! Use --fit_detected, --fit_icu, --fit_hospitalised, or --fit_deaths')
 
     # load data
-    t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data()
+    if args.fit_data.lower() == 'wc':
+        t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data_WC()
+        total_pop = 7000000
+    elif args.fit_data.lower() == 'national':
+        t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data_national()
+        total_pop = 59000000
+    else:
+        raise ValueError("The --fitting_data flag is not specified correctly. "
+                         f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
 
     detected_fit = i_d_obs if args.fit_detected else None
     h_fit = i_h_obs if args.fit_hospitalised else None
@@ -78,9 +96,11 @@ def main():
                                                                     h_fit,
                                                                     icu_fit,
                                                                     deaths_fit,
+                                                                    total_pop=total_pop,
                                                                     nb_samples=args.nb_samples,
                                                                     ratio_resample=args.ratio_resample,
                                                                     prop_as_range=args.prop_as_range,
+                                                                    load_prior_file=load_prior_file,
                                                                     model_base=save_dir)
 
     if args.nb_runs > 1:
@@ -88,11 +108,11 @@ def main():
             model_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
             logging.info(f'Executing run {run + 1}')
             _build_and_solve_model(model_base)
-            calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, model_base=model_base)
+            calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, total_pop=total_pop, model_base=model_base)
     else:
         model_base = output_dir.joinpath(f'{args.model_name}')
         _build_and_solve_model(model_base)
-        calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, model_base=model_base)
+        calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, total_pop=total_pop, model_base=model_base)
 
 
 def build_and_solve_model(t_obs,
@@ -101,48 +121,85 @@ def build_and_solve_model(t_obs,
                           i_icu_obs=None,
                           d_icu_obs=None,
                           nb_groups: int = 1,
+                          total_pop: int = 1,
                           nb_samples: int = 1000000,
                           ratio_resample: float = 0.05,
+                          load_prior_file: Path = None,
                           model_base: Path = Path('data/model'),
                           prop_as_range=None):
     if prop_as_range is None:
         prop_as_range = [0.6, 0.9]
 
-    r0 = np.random.uniform(2, 3.5, size=(nb_samples, 1))
-    time_infectious = np.random.uniform(2, 2.6, size=(nb_samples, 1))
-    e0 = np.random.uniform(0.001, 5, size=(nb_samples, 1))
-    rel_lockdown_beta = np.random.uniform(0, 1, size=(nb_samples, 1))
+    if not load_prior_file:
+        logging.info('Setting priors')
+        time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
+        prop_a = _uniform_from_range(prop_as_range, size=(nb_samples, 1))
+        prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
+        prop_s_to_h = np.random.uniform(0.86, 0.91, size=(nb_samples, 1))
+        prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, 1))
+        prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, 1))
+        prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, 1))
 
-    # set prop_a
-    prop_a = _uniform_from_range(prop_as_range, size=(nb_samples, 1))
+        # e0 = np.random.uniform(1E-8, 1e-6, size=(nb_samples, 1))
+    else:
+        # load df
+        logging.info(f"Loading priors from {load_prior_file}")
+        df_priors = pd.read_csv(load_prior_file)
+        nb_prior_groups = int(df_priors['group'].max() + 1)
+        nb_prior_samples = int(len(df_priors) / nb_prior_groups)
+        nb_repeats = int(nb_samples / nb_prior_samples)
+
+        # fix number of samples accordingly
+        nb_samples = nb_repeats * nb_prior_samples
+
+        # get mean variables
+        get_mean = lambda x: df_priors[x].to_numpy() \
+            .reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0)
+
+        # set random vars
+        random_scale = 0.01
+        time_infectious = np.random.normal(get_mean('time_infectious'), scale=random_scale)
+        prop_a = np.random.normal(get_mean('prop_a'), scale=random_scale).clip(min=0, max=1)
+        prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
+        prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
+        prop_h_to_c = np.random.normal(get_mean('prop_h_to_c'), scale=random_scale).clip(min=0, max=1)
+        prop_h_to_d = np.random.normal(get_mean('prop_h_to_d'), scale=random_scale).clip(min=0, max=1)
+        prop_c_to_d = np.random.normal(get_mean('prop_c_to_d'), scale=random_scale).clip(min=0, max=1)
+        # e0 = np.random.normal(get_mean('e0'), scale=random_scale) / 7000000
+
+    r0 = np.random.uniform(1.5, 3.5, size=(nb_samples, 1))
+    beta = r0 / time_infectious
+    rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
+    rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    y0[:, :, 0] = 7000000 - e0
-    y0[:, :, 1] = e0
+    e0 = np.random.uniform(1e-8, 1e-6, size=(nb_samples, 1))
+    y0[:, :, 0] = (1 - e0) * total_pop
+    y0[:, :, 1] = e0 * total_pop
     y0 = y0.reshape(-1)
     t0 = -50
 
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
-        beta=r0 / time_infectious,
+        beta=beta,
         rel_lockdown_beta=rel_lockdown_beta,
         rel_postlockdown_beta=0.8,
-        rel_beta_as=np.random.uniform(0.3, 1, size=(nb_samples, 1)),
+        rel_beta_as=rel_beta_as,
         prop_a=prop_a,
-        prop_m=(1 - prop_a) * 0.957,  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
-        prop_s_to_h=np.random.uniform(0.8, 0.95, size=(nb_samples, 1)),
-        prop_h_to_c=np.random.beta(34, 191, size=(nb_samples, 1)),
-        prop_h_to_d=np.random.beta(41, 150, size=(nb_samples, 1)),
-        prop_c_to_d=np.random.beta(20, 14, size=(nb_samples, 1)),
+        prop_m=prop_m,
+        prop_s_to_h=prop_s_to_h,
+        prop_h_to_c=prop_h_to_c,
+        prop_h_to_d=prop_h_to_d,
+        prop_c_to_d=prop_c_to_d,
         time_incubate=5.1,
         time_infectious=time_infectious,
         time_s_to_h=6,
         time_s_to_c=6,
         time_h_to_c=10,
-        time_h_to_r=9.8,
-        time_h_to_d=11.1,
-        time_c_to_r=18.1,
-        time_c_to_d=17.2,
+        time_h_to_r=10.1,
+        time_h_to_d=9.9,
+        time_c_to_r=18.3,
+        time_c_to_d=18.8,
         y0=y0
     )
 
@@ -214,15 +271,17 @@ def build_and_solve_model(t_obs,
 
     plt.tight_layout()
     fig.savefig(f'{model_base}_priors_posterior.png')
+    plt.clf()
 
     logging.info('Building joint distribution plot')
     g = sns.PairGrid(df_resample, corner=True, hue="group")
     try:
         g = g.map_lower(sns.kdeplot, colors='C0')
         g = g.map_diag(sns.distplot)
-        g.savefig(f'{model_base}_joint_posterior.png')
     except np.linalg.LinAlgError:
         logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
+    g.savefig(f'{model_base}_joint_posterior.png')
+    plt.clf()
 
     del model, fig, g
 
@@ -264,9 +323,9 @@ def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
         pickle.dump(group_vars, f)
 
 
-def load_data(remove_small: bool = True):
+def load_data_WC(remove_small: bool = True):
     # get data
-    logging.info('Loading data')
+    logging.info('Loading WC data')
     df_deaths = pd.read_csv(
         'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv',
         parse_dates=['date'],
@@ -280,6 +339,12 @@ def load_data(remove_small: bool = True):
     df_hosp_icu = pd.read_csv('data/WC_data.csv',
                               parse_dates=['date'],
                               date_parser=lambda t: pd.to_datetime(t, format='%Y-%m-%d'))
+
+    # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
+    max_date = pd.to_datetime('2020/05/14')
+    df_deaths = df_deaths[df_deaths['date'] <= max_date]
+    df_confirmed = df_confirmed[df_confirmed['date'] <= max_date]
+    df_hosp_icu = df_hosp_icu[df_hosp_icu['date'] <= max_date]
 
     df_deaths = df_deaths.sort_values('date')
     df_confirmed = df_confirmed.sort_values('date')
@@ -330,11 +395,64 @@ def load_data(remove_small: bool = True):
     return t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs
 
 
+def load_data_national(remove_small: bool = True):
+    logging.info('Loading national data')
+    df_deaths = pd.read_csv(
+        'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv',
+        parse_dates=['date'],
+        date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
+    )
+    df_confirmed = pd.read_csv(
+        'https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_confirmed.csv',
+        parse_dates=['date'],
+        date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
+    )
+
+    df_deaths = df_deaths.sort_values('date')
+    df_confirmed = df_confirmed.sort_values('date')
+
+    df_deaths = df_deaths[['date', 'total']]
+    df_confirmed = df_confirmed[['date', 'total']]
+
+    logging.info('Linearly interpolating missing data')
+    df_confirmed = df_confirmed.interpolate(method='linear')
+    df_deaths = df_deaths.interpolate(method='linear')
+
+    logging.info('Setting date of lockdown 2020-03-27 to day 0')
+    df_deaths['Day'] = (df_deaths['date'] - pd.to_datetime('2020-03-27')).dt.days
+    df_confirmed['Day'] = (df_confirmed['date'] - pd.to_datetime('2020-03-27')).dt.days
+
+    logging.info('Merging data sources')
+    df_merge = df_confirmed.merge(df_deaths, on='Day', how='left', suffixes=('_confirmed', '_deaths'))
+    df_merge = df_merge.interpolate(method='linear')
+    df_merge = df_merge[
+        ['date_confirmed', 'total_confirmed', 'total_deaths', 'Day']]
+    df_merge = df_merge.fillna(0)
+
+    df_merge['Day'] = df_merge['Day'].astype(int)
+    df_merge['total_confirmed'] = df_merge['total_confirmed'].astype(int)
+    df_merge['total_deaths'] = df_merge['total_deaths'].astype(int)
+
+    if remove_small:
+        logging.info('Filtering out data that contains small counts (as not to bias the poisson model)')
+        df_merge = df_merge[df_merge['total_deaths'] > 5]
+        logging.info(f"Minimum data day after filtering: {df_merge['Day'].min()}")
+
+    t_obs = df_merge['Day'].to_numpy()
+    i_d_obs = df_merge['total_confirmed'].to_numpy()
+    d_icu_obs = df_merge['total_deaths'].to_numpy()
+
+    logging.warning('No ICU or hospital national data, will only be able to fit to detected and death cases.')
+
+    return t_obs, i_d_obs, None, None, d_icu_obs
+
+
 def calculate_resample(t_obs,
                        i_d_obs,
                        i_h_obs,
                        i_icu_obs,
                        d_icu_obs,
+                       total_pop: int = 1,
                        model_base='data/model'):
     with open(f'{model_base}_scalar.pkl', 'rb') as f:
         scalar_vars = pickle.load(f)
@@ -358,8 +476,8 @@ def calculate_resample(t_obs,
     groups = resample_vars.pop('group')
 
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    y0[:, :, 0] = 7000000 - e0_resample
-    y0[:, :, 1] = e0_resample
+    y0[:, :, 0] = (1 - e0_resample) * total_pop
+    y0[:, :, 1] = e0_resample * total_pop
     y0 = y0.reshape(-1)
 
     logging.info('Creating resampled model')
@@ -416,6 +534,7 @@ def calculate_resample(t_obs,
     d = np.sum(d, axis=1)
 
     # want to find the samples the best approximates median and 95% CIs
+    logging.info('Generating death percentile samples')
     d_med = np.median(d)
     d_25 = np.percentile(d, 2.5)
     d_975 = np.percentile(d, 97.5)
@@ -442,9 +561,11 @@ def calculate_resample(t_obs,
     reshaped_percentile_vars['group'] = np.asarray([[i] * 3 for i in range(nb_groups)]).reshape(-1)
     df_percentiles = pd.DataFrame(reshaped_percentile_vars)
     df_percentiles.insert(0, column='Percentile', value=[2.5, 50, 97.5])
+    logging.info(f'Saving death percentile parameters to {model_base}_death_percentile_params.csv')
     df_percentiles.to_csv(f'{model_base}_death_percentile_params.csv', index=False)
 
     # plot final deaths as a kdeplot
+    fig = plt.figure(figsize=(8, 5))
     sns.kdeplot(d)
     ax = plt.gca()
     ax.axvline(d_25, c='C1', ls='--', label='2.5 Percentile')
@@ -455,7 +576,7 @@ def calculate_resample(t_obs,
     ax.set_title(f'Deaths distribution on {tt_date[-1]}')
     ax.legend()
     plt.tight_layout()
-    plt.gcf().savefig(f'{model_base}_death_distribution.png')
+    fig.savefig(f'{model_base}_death_distribution.png')
     plt.clf()
 
     # TODO: use code from utils
@@ -474,6 +595,7 @@ def calculate_resample(t_obs,
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs]
     titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths']
 
+    logging.info('Generating timeseries summary stats and plotting')
     summary_stats = {}
     for j, row in enumerate(axes):
         for i in range(len(row)):
@@ -487,10 +609,14 @@ def calculate_resample(t_obs,
                 tick.set_rotation(45)
             # axes[i].plot(tt, pred_vars[i][:, :, 0], c='k', alpha=0.1)
             if j == 0:
-                axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
+                if obs_vars[i] is not None:
+                    axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
+                    axes[j, i].set_ylim((-1, np.max(obs_vars[i]) * 1.05))
+                else:
+                    axes[j, i].set_ylim((-1, np.max(mu[110]) * 1.05))
                 axes[j, i].set_xlim(
-                    (np.min(t_date) - datetime.timedelta(days=1), np.max(t_date) + datetime.timedelta(days=1)))
-                axes[j, i].set_ylim((-1, np.max(obs_vars[i]) * 1.05))
+                    (pd.to_datetime('2020/03/27'), np.max(t_date) + datetime.timedelta(days=1))
+                )
                 axes[j, i].set_title(titles[i])
             if j == 1:
                 axes[j, i].plot(tt_date, pred_vars[i][:, arg_25], c='C1', ls='--')
@@ -503,15 +629,15 @@ def calculate_resample(t_obs,
             summary_stats[f'{titles[i]}_97.5CI'] = high.reshape(-1)
 
     plt.tight_layout()
+    logging.info(f'Saving plot to {model_base}_prediction.png')
     plt.savefig(f'{model_base}_prediction.png')
     plt.clf()
 
-    logging.info('Saving summary stats')
+    logging.info(f'Saving timeseries summary stats to {model_base}_prediction.csv')
     groups = np.asarray([[i] * len(tt) for i in range(nb_groups)]).reshape(-1)
     summary_stats['group'] = groups
     df_stats = pd.DataFrame(summary_stats)
     df_stats.insert(0, 'Date', tt_date)
-    print(df_stats.head())
     df_stats.to_csv(f'{model_base}_prediction.csv', index=False)
 
 
