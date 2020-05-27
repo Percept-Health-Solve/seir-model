@@ -2,6 +2,8 @@ import logging
 import argparse
 import datetime
 from pathlib import Path
+import json
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -12,9 +14,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from seir.sampling.model import SamplingNInfectiousModel
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nb_samples', type=int, default=1000000, help='Number of initial samples per run')
+parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
 parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proportion of resamples per run')
 parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
@@ -26,12 +30,26 @@ parser.add_argument('--fit_deaths', action='store_true', help='Fit the model to 
 parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to 'WC' or 'national' data")
 parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
+parser.add_argument('--from_config', type=str, help='Load model config from given json file')
+
 parser.add_argument('--prop_as_range', type=float, default=[0.6, 0.9], nargs=2,
                     help='Lower and upper bounds for the prop_as uniform distribution')
+parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
+                    help='The relative infectivity post lockdown.')
 
 
 def main():
     args = parser.parse_args()
+
+    if args.from_config:
+        # load arguments from config, but allow them to be overwritten by the command prompt
+        json_dir = Path(args.from_config)
+        if not json_dir.is_file():
+            raise ValueError(f"Given configuration file '{args.from_config}' is either not a file or does not exist.")
+        with open(json_dir, 'rt') as f:
+            json_args = argparse.Namespace()
+            json_args.__dict__.update(json.load(f))
+            args = parser.parse_args(namespace=json_args)
 
     output_dir = Path(args.output_dir)
 
@@ -85,6 +103,14 @@ def main():
         raise ValueError("The --fitting_data flag is not specified correctly. "
                          f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
 
+    # save model args to config file
+    with open(output_dir.joinpath(f"{args.model_name}_config.json"), 'wt') as f:
+        # save the json, but don't include the overwrite or from_json commands
+        cmds = vars(args)
+        cmds.pop('overwrite', None)
+        cmds.pop('from_json', None)
+        json.dump(cmds, f, indent=4)
+
     detected_fit = i_d_obs if args.fit_detected else None
     h_fit = i_h_obs if args.fit_hospitalised else None
     icu_fit = i_icu_obs if args.fit_icu else None
@@ -96,10 +122,12 @@ def main():
                                                                     h_fit,
                                                                     icu_fit,
                                                                     deaths_fit,
+                                                                    nb_groups=nb_groups,
                                                                     total_pop=total_pop,
                                                                     nb_samples=args.nb_samples,
                                                                     ratio_resample=args.ratio_resample,
                                                                     prop_as_range=args.prop_as_range,
+                                                                    rel_postlockdown_beta=args.rel_postlockdown_beta,
                                                                     load_prior_file=load_prior_file,
                                                                     model_base=save_dir)
 
@@ -124,6 +152,7 @@ def build_and_solve_model(t_obs,
                           total_pop: int = 1,
                           nb_samples: int = 1000000,
                           ratio_resample: float = 0.05,
+                          rel_postlockdown_beta: float = 0.8,
                           load_prior_file: Path = None,
                           model_base: Path = Path('data/model'),
                           prop_as_range=None):
@@ -183,7 +212,7 @@ def build_and_solve_model(t_obs,
         nb_groups=nb_groups,
         beta=beta,
         rel_lockdown_beta=rel_lockdown_beta,
-        rel_postlockdown_beta=0.8,
+        rel_postlockdown_beta=rel_postlockdown_beta,
         rel_beta_as=rel_beta_as,
         prop_a=prop_a,
         prop_m=prop_m,
