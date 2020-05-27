@@ -68,7 +68,8 @@ class SamplingNInfectiousModel:
 
         prop_s = 1 - prop_a - prop_m
         prop_s_to_c = 1 - prop_s_to_h
-        prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
+        # TODO: Remove prop_h_to_r clip in favor of appropriate sampling criteria
+        prop_h_to_r = np.clip(1 - prop_h_to_c - prop_h_to_d, 0, 1)
         prop_c_to_r = 1 - prop_c_to_d
 
         time_i_to_h = time_s_to_h - time_infectious
@@ -366,7 +367,8 @@ class SamplingNInfectiousModel:
                                 ratio_s_detected=1.0,
                                 ratio_resample: float = 0.1,
                                 y0=None,
-                                smoothing=1):
+                                smoothing=1,
+                                group_total: bool = False):
         # number of resamples
         m = int(np.round(self.nb_samples * ratio_resample))
 
@@ -396,12 +398,23 @@ class SamplingNInfectiousModel:
                                             ratio_mild_detected=ratio_m_detected,
                                             ratio_severe_detected=ratio_s_detected)
 
+        h_tot = h_r + h_c + h_d
+        c_tot = c_r + c_d
+        d_tot = d_h + d_c
+
+        # compare totals if needed
+        if group_total:
+            detected = np.sum(detected, axis=2, keepdims=True)
+            h_tot = np.sum(h_tot, axis=2, keepdims=True)
+            c_tot = np.sum(c_tot, axis=2, keepdims=True)
+            d_tot = np.sum(d_tot, axis=2, keepdims=True)
+
         # model detected cases as poisson distribution y~P(lambda=detected_cases)
         logging.info('Calculating log weights')
         log_weights_detected = 0 if det_obs is None else _log_poisson(det_obs, detected)
-        log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_r + h_c + h_d)
-        log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_r + c_d)
-        log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_h + d_c)
+        log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_tot)
+        log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_tot)
+        log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_tot)
 
         # Free up memory at this point
         del s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c

@@ -1,14 +1,11 @@
 import logging
 import argparse
 import datetime
-from pathlib import Path
 import json
 import pickle
 
 import numpy as np
 import pandas as pd
-
-import pickle
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -83,6 +80,7 @@ def main():
                         level=logging.INFO)
     logging.warning(f"Training model for {args.nb_runs} run(s) with {args.nb_samples} samples "
                     f"and {args.ratio_resample * 100:.1f}% resamples.")
+
     if args.fit_detected or args.fit_hospitalised or args.fit_icu or args.fit_deaths:
         logging.warning(f"Fitting to {'detected, ' if args.fit_detected else ''}"
                         f"{'hospitalised, ' if args.fit_hospitalised else ''}"
@@ -91,6 +89,13 @@ def main():
                         f"{'death' if args.fit_deaths else ''} cases")
     else:
         raise ValueError(f'Not fitting to any data! Use --fit_detected, --fit_icu, --fit_hospitalised, or --fit_deaths')
+
+    if args.age_groups:
+        logging.warning('Splitting the population into 10 year age bands when fitting')
+        nb_groups = 9  # 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+
+    else:
+        logging.warning('Treating population age groups homogenously')
+        nb_groups = 1
 
     # load data
     if args.fit_data.lower() == 'wc':
@@ -163,11 +168,21 @@ def build_and_solve_model(t_obs,
         logging.info('Setting priors')
         time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
         prop_a = _uniform_from_range(prop_as_range, size=(nb_samples, 1))
-        prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
-        prop_s_to_h = np.random.uniform(0.86, 0.91, size=(nb_samples, 1))
-        prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, 1))
-        prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, 1))
-        prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, 1))
+
+        prop_s_to_h = np.random.uniform(0, 1, size=(nb_samples, nb_groups))
+        if nb_groups == 1:
+            # inform variables from the WC experience, not controlling for age
+            prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
+            prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, nb_groups))
+            prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, nb_groups))
+            prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, nb_groups))
+        if nb_groups == 9:
+            # inform variables from the WC experience, controlling for age
+            prop_m = (1 - prop_a) * np.array([0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]) # from ferguson
+            # TODO: Change beta distributions to dirichlet distributions
+            prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
+            prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
+            prop_c_to_d = np.random.beta([0.1, 0.1, 0.1, 2, 14, 18, 12, 6, 2], [1.1, 1.1, 1.1, 5, 18, 20, 12, 4, 3], size=(nb_samples, nb_groups))
 
         # e0 = np.random.uniform(1E-8, 1e-6, size=(nb_samples, 1))
     else:
@@ -202,9 +217,19 @@ def build_and_solve_model(t_obs,
     rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    e0 = np.random.uniform(1e-8, 1e-6, size=(nb_samples, 1))
-    y0[:, :, 0] = (1 - e0) * total_pop
-    y0[:, :, 1] = e0 * total_pop
+    e0 = np.random.uniform(1e-8, 1e-6, size=(nb_samples, 1)) / nb_groups
+    if nb_groups == 1:
+        # single population group, so we set accordingly
+        y0[:, :, 0] = (1 - e0) * total_pop
+        y0[:, :, 1] = e0 * total_pop
+    if nb_groups == 9:
+        # multiple population groups as a result of age bands
+        # have to proportion the starting populations respectively
+        df_start = pd.read_csv('data/Startpop_2density_0comorbidity.csv', index_col=0)
+        df_pop_prop = df_start.groupby('age').sum() / df_start['Population'].sum()
+        for i, row in enumerate(df_pop_prop.iterrows()):
+            y0[:, i, 0] = (1 - e0[:, 0]) * total_pop * row[1]['Population']
+            y0[:, i, 1] = e0[:, 0] * total_pop * row[1]['Population']
     y0 = y0.reshape(-1)
     t0 = -50
 
@@ -249,7 +274,8 @@ def build_and_solve_model(t_obs,
                                   ratio_m_detected=ratio_m_detected,
                                   ratio_s_detected=ratio_s_detected,
                                   ratio_resample=ratio_resample,
-                                  smoothing=1)
+                                  smoothing=1,
+                                  group_total=True)
 
     sample_vars = model.sample_vars
     resample_vars = model.resample_vars
@@ -268,51 +294,61 @@ def build_and_solve_model(t_obs,
     # save variables
     save_vars_to_csv(model, base=model_base)
 
+    # reshape to a dataframe for pair plotting
+    df_resample = pd.DataFrame(index=range(model.nb_resamples))
+    for key, value in resample_vars.items():
+        for i in range(value.shape[-1]):
+            df_resample[f'{key}_{i}'] = value[:, i]
+
     # plot variables of interest
     logging.info('Plotting prior and posterior distributions')
     sns.set(style='darkgrid')
-    fig, axes = plt.subplots(4, 5, figsize=(11, 11))
-    i = 0
+    fig, axes = plt.subplots(10, 10, figsize=(30, 30))
     axes = axes.flat
-    # reshape to a dataframe for pair plotting
-    reshaped_resample_vars = {}
+
+    ax_idx = 0
     for key, value in resample_vars.items():
-        reshaped_resample_vars[key] = value.reshape(-1)
-    reshaped_resample_vars['group'] = np.asarray([[i] * model.nb_resamples for i in range(nb_groups)]).reshape(-1)
-    df_resample = pd.DataFrame(reshaped_resample_vars)
-    try:
-        for key, value in resample_vars.items():
-            # TODO: plot variables for multiple groups
-            logging.info(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
-            sns.distplot(value[:, 0], ax=axes[i], color='C0')
-            sns.distplot(sample_vars[key][:, 0], ax=axes[i], color='C1')
-            axes[i].set_title(key)
-            i += 1
-        logging.info('Adding calculated variables')
-        for key, value in calc_resample_vars.items():
-            logging.info(f'{key}: mean = {value.mean():.3f} - std = {value.std():.3f}')
-            sns.distplot(value[:, 0], ax=axes[i], color='C0')
-            sns.distplot(calc_sample_vars[key][:, 0], ax=axes[i], color='C1')
-            axes[i].set_title(key)
-            i += 1
-    except np.linalg.LinAlgError:
-        logging.warning(f'Plotting of priors and posteriors failed due to posterior collapse')
+        # TODO: plot variables for multiple groups
+        for i in range(value.shape[-1]):
+            logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
+            try:
+                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            except np.linalg.LinAlgError:
+                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            sns.distplot(sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
+            # axes[ax_idx].axvline(value[:, i].mean(), ls='--')
+            axes[ax_idx].set_title(f'{key}_{i}')
+            ax_idx += 1
+    logging.info('Adding calculated variables')
+    for key, value in calc_resample_vars.items():
+        for i in range(value.shape[-1]):
+            logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
+            try:
+                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            except np.linalg.LinAlgError:
+                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            sns.distplot(calc_sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
+            # axes[ax_idx].axvline(value[:, i].mean(), ls='--')
+            axes[ax_idx].set_title(f'{key}_{i}')
+            ax_idx += 1
 
     plt.tight_layout()
     fig.savefig(f'{model_base}_priors_posterior.png')
     plt.clf()
 
-    logging.info('Building joint distribution plot')
-    g = sns.PairGrid(df_resample, corner=True, hue="group")
-    try:
-        g = g.map_lower(sns.kdeplot, colors='C0')
-        g = g.map_diag(sns.distplot)
-    except np.linalg.LinAlgError:
-        logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
-    g.savefig(f'{model_base}_joint_posterior.png')
-    plt.clf()
+    if len(df_resample.columns) <= 20:
+        logging.info('Building joint distribution plot')
+        g = sns.PairGrid(df_resample, corner=True)
+        try:
+            g = g.map_lower(sns.kdeplot, colors='C0')
+            g = g.map_diag(sns.distplot)
+        except np.linalg.LinAlgError:
+            logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
+        g.savefig(f'{model_base}_joint_posterior.png')
+        plt.clf()
+        del g
 
-    del model, fig, g
+    del model, fig
 
 
 def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
@@ -323,29 +359,39 @@ def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
     resample_vars = model.resample_vars
     log_weights = model.log_weights
 
+    nb_groups = model.nb_groups
     nb_samples = model.nb_samples
     nb_resamples = model.nb_resamples
 
-    logging.info(f'Saving model variables to {base}_*.csv')
+    # logging.info(f'Saving model variables to {base}_*.csv')
     # need to reshape sample vars
-    reshaped_sample_vars = {}
-    for key, value in sample_vars.items():
-        reshaped_sample_vars[key] = value.reshape(-1)
-    reshaped_sample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
-    # need to reshape resample vars
-    reshaped_resample_vars = {}
-    for key, value in resample_vars.items():
-        reshaped_resample_vars[key] = value.reshape(-1)
-    reshaped_resample_vars['group'] = np.asarray([[i] * nb_resamples for i in range(nb_groups)]).reshape(-1)
+    # reshaped_sample_vars = {}
+    # for key, value in sample_vars.items():
+    #     reshaped_sample_vars[key] = value.reshape(-1)
+    # reshaped_sample_vars['group'] = np.asarray([[i] * nb_samples for i in range(nb_groups)]).reshape(-1)
+    # # need to reshape resample vars
+    # reshaped_resample_vars = {}
+    # for key, value in resample_vars.items():
+    #     reshaped_resample_vars[key] = value.reshape(-1)
+    # reshaped_resample_vars['group'] = np.asarray([[i] * nb_resamples for i in range(nb_groups)]).reshape(-1)
 
     # define dfs
-    df_sample = pd.DataFrame(reshaped_sample_vars)
-    df_sample['log_weights'] = log_weights
-    df_resample = pd.DataFrame(reshaped_resample_vars)
+    # for key, value in reshaped_resample_vars.items():
+    #     print(key, value.shape)
+    # for key, value in reshaped_sample_vars.items():
+    #     print(key, value.shape)
+    # df_sample = pd.DataFrame(reshaped_sample_vars)
+    # df_sample['log_weights'] = log_weights.repeat(nb_groups, axis=-1)
+    # print(df_sample)
+    # df_resample = pd.DataFrame(reshaped_resample_vars)
 
     # save files
-    df_sample.to_csv(f"{base}_sample.csv", index=False)
-    df_resample.to_csv(f"{base}_resample.csv", index=False)
+    # df_sample.to_csv(f"{base}_sample.csv", index=False)
+    # df_resample.to_csv(f"{base}_resample.csv", index=False)
+    with open(f'{base}_sample.pkl', 'wb') as f:
+        pickle.dump(sample_vars, f)
+    with open(f'{base}_resample.pkl', 'wb') as f:
+        pickle.dump(resample_vars, f)
     with open(f'{base}_scalar.pkl', 'wb') as f:
         pickle.dump(scalar_vars, f)
     with open(f'{base}_group.pkl', 'wb') as f:
@@ -487,26 +533,43 @@ def calculate_resample(t_obs,
         scalar_vars = pickle.load(f)
     with open(f'{model_base}_group.pkl', 'rb') as f:
         group_vars = pickle.load(f)
-    df_resample = pd.read_csv(f'{model_base}_resample.csv')
-    nb_groups = df_resample['group'].max() + 1
-    nb_samples = int(len(df_resample) / nb_groups)
+    with open(f'{model_base}_resample.pkl', 'rb') as f:
+        resample_vars = pickle.load(f)
+    nb_groups = 1
+    nb_samples = None
+    for key, value in resample_vars.items():
+        nb_groups = np.max([nb_groups, value.shape[-1]])
+        if nb_samples is None:
+            nb_samples = value.shape[0]
+        else:
+            assert nb_samples == value.shape[0]
 
     logging.info(f"Samples: {nb_samples}")
     logging.info(f"Groups: {nb_groups}")
 
-    resample_vars = {}
-    for col in df_resample:
-        resample_vars[col] = df_resample[col].to_numpy()
-    for key, value in resample_vars.items():
-        resample_vars[key] = value.reshape(nb_samples, nb_groups)
+    # resample_vars = {}
+    # for col in df_resample:
+    #     resample_vars[col] = df_resample[col].to_numpy()
+    # for key, value in resample_vars.items():
+    #     resample_vars[key] = value.reshape(nb_samples, nb_groups)
 
     t0 = scalar_vars.pop('t0')
-    e0_resample = resample_vars.pop('e0')
-    groups = resample_vars.pop('group')
+    e0 = resample_vars.pop('e0')
+    # groups = resample_vars.pop('group')
 
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    y0[:, :, 0] = (1 - e0_resample) * total_pop
-    y0[:, :, 1] = e0_resample * total_pop
+    if nb_groups == 1:
+        y0[:, :, 0] = (1 - e0) * total_pop
+        y0[:, :, 1] = e0 * total_pop
+    elif nb_groups == 9:
+        # TODO: Make y0 resamplig a thing
+        # multiple population groups as a result of age bands
+        # have to proportion the starting populations respectively
+        df_start = pd.read_csv('data/Startpop_2density_0comorbidity.csv', index_col=0)
+        df_pop_prop = df_start.groupby('age').sum() / df_start['Population'].sum()
+        for i, row in enumerate(df_pop_prop.iterrows()):
+            y0[:, i, 0] = (1 - e0[:, 0]) * total_pop * row[1]['Population']
+            y0[:, i, 1] = e0[:, 0] * total_pop * row[1]['Population']
     y0 = y0.reshape(-1)
 
     logging.info('Creating resampled model')
@@ -584,11 +647,10 @@ def calculate_resample(t_obs,
         percentile_vars[key] = value[[arg_25, arg_med, arg_975]]
 
     # reshape this for converting to a df
-    reshaped_percentile_vars = {}
+    df_percentiles = pd.DataFrame(index=range(3))
     for key, value in percentile_vars.items():
-        reshaped_percentile_vars[key] = value.reshape(-1)
-    reshaped_percentile_vars['group'] = np.asarray([[i] * 3 for i in range(nb_groups)]).reshape(-1)
-    df_percentiles = pd.DataFrame(reshaped_percentile_vars)
+        for i in range(value.shape[-1]):
+            df_percentiles[f'{key}_{i}'] = value[:, i]
     df_percentiles.insert(0, column='Percentile', value=[2.5, 50, 97.5])
     logging.info(f'Saving death percentile parameters to {model_base}_death_percentile_params.csv')
     df_percentiles.to_csv(f'{model_base}_death_percentile_params.csv', index=False)
@@ -616,11 +678,16 @@ def calculate_resample(t_obs,
     cum_detected_samples = ratio_as_detected * (i_a + r_a) + ratio_m_detected * (i_m + r_m) \
                            + ratio_s_detected * (i_s + i_h + i_c + h_c + h_r + h_d + c_r + c_d + r_h + r_c + d_h + d_c)
 
+    cum_detected_samples = np.sum(cum_detected_samples, axis=2)
+    h_tot = np.sum(h_r + h_d + h_c, axis=2)
+    c_tot = np.sum(c_r + c_d, axis=2)
+    d_tot = np.sum(d_c + d_h, axis=2)
+
     logging.info('Plotting solutions')
 
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 
-    pred_vars = [cum_detected_samples, h_r + h_d + h_c, c_r + c_d, d_c + d_h]
+    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot]
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs]
     titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths']
 
@@ -633,7 +700,7 @@ def calculate_resample(t_obs,
             high = np.percentile(pred_vars[i], 97.5, axis=1)
 
             axes[j, i].plot(tt_date, mu, c='C0')
-            axes[j, i].fill_between(tt_date, low[:, 0], high[:, 0], alpha=.2, facecolor='C0')
+            axes[j, i].fill_between(tt_date, low, high, alpha=.2, facecolor='C0')
             for tick in axes[j, i].get_xticklabels():
                 tick.set_rotation(45)
             # axes[i].plot(tt, pred_vars[i][:, :, 0], c='k', alpha=0.1)
@@ -663,8 +730,6 @@ def calculate_resample(t_obs,
     plt.clf()
 
     logging.info(f'Saving timeseries summary stats to {model_base}_prediction.csv')
-    groups = np.asarray([[i] * len(tt) for i in range(nb_groups)]).reshape(-1)
-    summary_stats['group'] = groups
     df_stats = pd.DataFrame(summary_stats)
     df_stats.insert(0, 'Date', tt_date)
     df_stats.to_csv(f'{model_base}_prediction.csv', index=False)
