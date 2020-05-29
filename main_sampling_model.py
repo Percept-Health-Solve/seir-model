@@ -176,7 +176,14 @@ def build_and_solve_model(t_obs,
             prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, nb_groups))
             prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, nb_groups))
             prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, nb_groups))
-        if nb_groups == 9:
+
+            # inform survival times from KM analysis of WC data
+            time_h_to_c = 10
+            time_h_to_r = 10.1
+            time_h_to_d = 9.9
+            time_c_to_r = 18.3
+            time_c_to_d = 18.8
+        elif nb_groups == 9:
             # inform variables from the WC experience, controlling for age
             prop_m = (1 - prop_a) * np.array([0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]) # from ferguson
             # TODO: Change beta distributions to dirichlet distributions
@@ -184,7 +191,12 @@ def build_and_solve_model(t_obs,
             prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
             prop_c_to_d = np.random.beta([0.1, 0.1, 0.1, 2, 14, 18, 12, 6, 2], [1.1, 1.1, 1.1, 5, 18, 20, 12, 4, 3], size=(nb_samples, nb_groups))
 
-        # e0 = np.random.uniform(1E-8, 1e-6, size=(nb_samples, 1))
+            # inform survival times from KM analysis of WC data
+            time_h_to_c = 10
+            time_h_to_r = [[4, 12, 14.8, 8.1, 8.3, 12, 9.1, 15.2, 10.8]]
+            time_h_to_d = [[9.9, 9.9, 9.9, 7.6, 10.1, 13, 10, 11.2, 13.5]]
+            time_c_to_r = [[6, 2, 18.3, 18.3, 20.9, 15, 15.6, 13.9, 15]]
+            time_c_to_d = [[18.8, 18.8, 18.8, 18.8, 22.9, 14.1, 15.3, 22, 13.9]]
     else:
         # load df
         logging.info(f"Loading priors from {load_prior_file}")
@@ -249,11 +261,11 @@ def build_and_solve_model(t_obs,
         time_infectious=time_infectious,
         time_s_to_h=6,
         time_s_to_c=6,
-        time_h_to_c=10,
-        time_h_to_r=10.1,
-        time_h_to_d=9.9,
-        time_c_to_r=18.3,
-        time_c_to_d=18.8,
+        time_h_to_c=time_h_to_c,
+        time_h_to_r=time_h_to_r,
+        time_h_to_d=time_h_to_d,
+        time_c_to_r=time_c_to_r,
+        time_c_to_d=time_c_to_d,
         y0=y0
     )
 
@@ -311,24 +323,24 @@ def build_and_solve_model(t_obs,
         # TODO: plot variables for multiple groups
         for i in range(value.shape[-1]):
             logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
-            try:
-                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
-            except np.linalg.LinAlgError:
-                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            # try:
+            #     sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            # except np.linalg.LinAlgError:
+            #     logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
             sns.distplot(sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
-            # axes[ax_idx].axvline(value[:, i].mean(), ls='--')
+            axes[ax_idx].axvline(value[:, i].mean(), ls='--')
             axes[ax_idx].set_title(f'{key}_{i}')
             ax_idx += 1
     logging.info('Adding calculated variables')
     for key, value in calc_resample_vars.items():
         for i in range(value.shape[-1]):
             logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
-            try:
-                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
-            except np.linalg.LinAlgError:
-                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            # try:
+            #     sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            # except np.linalg.LinAlgError:
+            #     logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
             sns.distplot(calc_sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
-            # axes[ax_idx].axvline(value[:, i].mean(), ls='--')
+            axes[ax_idx].axvline(value[:, i].mean(), ls='--')
             axes[ax_idx].set_title(f'{key}_{i}')
             ax_idx += 1
 
@@ -362,6 +374,8 @@ def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
     nb_groups = model.nb_groups
     nb_samples = model.nb_samples
     nb_resamples = model.nb_resamples
+
+    sample_vars['log_weights'] = log_weights
 
     # logging.info(f'Saving model variables to {base}_*.csv')
     # need to reshape sample vars
