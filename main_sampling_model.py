@@ -168,8 +168,8 @@ def build_and_solve_model(t_obs,
         logging.info('Setting priors')
         time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
         prop_a = _uniform_from_range(prop_as_range, size=(nb_samples, 1))
+        prop_s_to_h = 0.8875  # np.random.uniform(0, 1, size=(nb_samples, nb_groups))
 
-        prop_s_to_h = np.random.uniform(0, 1, size=(nb_samples, nb_groups))
         if nb_groups == 1:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
@@ -184,8 +184,9 @@ def build_and_solve_model(t_obs,
             time_c_to_r = 18.3
             time_c_to_d = 18.8
         elif nb_groups == 9:
+            logging.info('Using 9 groups, corresponding to 10 year age bands.')
             # inform variables from the WC experience, controlling for age
-            prop_m = (1 - prop_a) * np.array([0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]) # from ferguson
+            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])  # from ferguson
             # TODO: Change beta distributions to dirichlet distributions
             prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
             prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
@@ -229,7 +230,7 @@ def build_and_solve_model(t_obs,
     rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    e0 = np.random.uniform(1e-8, 1e-6, size=(nb_samples, 1)) / nb_groups
+    e0 = np.random.uniform(1e-9, 1e-6, size=(nb_samples, 1))
     if nb_groups == 1:
         # single population group, so we set accordingly
         y0[:, :, 0] = (1 - e0) * total_pop
@@ -323,10 +324,10 @@ def build_and_solve_model(t_obs,
         # TODO: plot variables for multiple groups
         for i in range(value.shape[-1]):
             logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
-            # try:
-            #     sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
-            # except np.linalg.LinAlgError:
-            #     logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            try:
+                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            except np.linalg.LinAlgError:
+                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
             sns.distplot(sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
             axes[ax_idx].axvline(value[:, i].mean(), ls='--')
             axes[ax_idx].set_title(f'{key}_{i}')
@@ -335,10 +336,10 @@ def build_and_solve_model(t_obs,
     for key, value in calc_resample_vars.items():
         for i in range(value.shape[-1]):
             logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
-            # try:
-            #     sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
-            # except np.linalg.LinAlgError:
-            #     logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+            try:
+                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+            except np.linalg.LinAlgError:
+                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
             sns.distplot(calc_sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
             axes[ax_idx].axvline(value[:, i].mean(), ls='--')
             axes[ax_idx].set_title(f'{key}_{i}')
