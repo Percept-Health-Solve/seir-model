@@ -510,6 +510,7 @@ def _determine_sample_vars(vars: dict, nb_groups):
         if value.ndim == 0:
             # scalar
             scalar_vars[key] = value
+            continue
         elif value.ndim == 1:
             # shouldn't exist, this is either an ill-defined sampler or ill-defined group var
             raise ValueError(f'Variable {key} should either be zero or two dimensional. This is either an\n'
@@ -523,6 +524,7 @@ def _determine_sample_vars(vars: dict, nb_groups):
                 nb_samples = val_shape[0]
             elif val_shape == (1, nb_groups):
                 group_vars[key] = value
+                continue
             else:
                 raise ValueError(f'Variable {key} seems to be an ill-defined group specific variable. It should take\n'
                                  f'a shape of (1, {nb_groups}), got {val_shape} instead.')
