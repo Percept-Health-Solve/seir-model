@@ -28,8 +28,11 @@ parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to
 parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
 parser.add_argument('--from_config', type=str, help='Load model config from given json file')
-
-parser.add_argument('--prop_as_range', type=float, default=[0.6, 0.9], nargs=2,
+parser.add_argument('--contact_heterogeneous', action='store_true',
+                    help='Use Kong et al (2016) method of employing contact heterogeneity in susceptible population')
+parser.add_argument('--contact_k', type=float, default=0.1,
+                    help='Value of k describing contact heterogenity in Kong et al 2016.')
+parser.add_argument('--prop_as_range', type=float, default=[0.75, 0.75], nargs=2,
                     help='Lower and upper bounds for the prop_as uniform distribution')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
@@ -90,20 +93,11 @@ def main():
     else:
         raise ValueError(f'Not fitting to any data! Use --fit_detected, --fit_icu, --fit_hospitalised, or --fit_deaths')
 
-    if args.age_groups:
-        logging.warning('Splitting the population into 10 year age bands when fitting')
-        nb_groups = 9  # 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+
-    else:
-        logging.warning('Treating population age groups homogenously')
-        nb_groups = 1
-
     # load data
     if args.fit_data.lower() == 'wc':
         t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data_WC()
-        total_pop = 7000000
     elif args.fit_data.lower() == 'national':
         t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs = load_data_national()
-        total_pop = 59000000
     else:
         raise ValueError("The --fitting_data flag is not specified correctly. "
                          f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
@@ -127,12 +121,7 @@ def main():
                                                                     h_fit,
                                                                     icu_fit,
                                                                     deaths_fit,
-                                                                    nb_groups=nb_groups,
-                                                                    total_pop=total_pop,
-                                                                    nb_samples=args.nb_samples,
-                                                                    ratio_resample=args.ratio_resample,
-                                                                    prop_as_range=args.prop_as_range,
-                                                                    rel_postlockdown_beta=args.rel_postlockdown_beta,
+                                                                    args=args,
                                                                     load_prior_file=load_prior_file,
                                                                     model_base=save_dir)
 
@@ -141,11 +130,13 @@ def main():
             model_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
             logging.info(f'Executing run {run + 1}')
             _build_and_solve_model(model_base)
-            calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, total_pop=total_pop, model_base=model_base)
+            calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
+        # process runs to single output
+
     else:
         model_base = output_dir.joinpath(f'{args.model_name}')
         _build_and_solve_model(model_base)
-        calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, total_pop=total_pop, model_base=model_base)
+        calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
 
 def build_and_solve_model(t_obs,
@@ -153,51 +144,54 @@ def build_and_solve_model(t_obs,
                           i_h_obs=None,
                           i_icu_obs=None,
                           d_icu_obs=None,
-                          nb_groups: int = 1,
-                          total_pop: int = 1,
-                          nb_samples: int = 1000000,
-                          ratio_resample: float = 0.05,
-                          rel_postlockdown_beta: float = 0.8,
+                          args=None,
                           load_prior_file: Path = None,
-                          model_base: Path = Path('data/model'),
-                          prop_as_range=None):
-    if prop_as_range is None:
-        prop_as_range = [0.6, 0.9]
+    if args.age_groups:
+        logging.warning('Splitting the population into 10 year age bands when fitting')
+        nb_groups = 9  # 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+ making 9 age groups
+    else:
+        logging.warning('Treating population age groups homogenously')
+        nb_groups = 1
+    nb_samples = args.nb_samples
+    ratio_resample = args.ratio_resample
+    rel_postlockdown_beta = args.rel_postlockdown_beta
+    contact_heterogeneous = args.contact_heterogeneous
+    contact_k = args.contact_k
+
+    # inform survival times from KM lifetime analysis of WC data
+    time_h_to_c = 10
+    time_h_to_r = 10.1
+    time_h_to_d = 9.9
+    time_c_to_r = 18.3
+    time_c_to_d = 18.8
 
     if not load_prior_file:
         logging.info('Setting priors')
         time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
-        prop_a = _uniform_from_range(prop_as_range, size=(nb_samples, 1))
+        prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         prop_s_to_h = 0.8875  # np.random.uniform(0, 1, size=(nb_samples, nb_groups))
 
-        if nb_groups == 1:
+        if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
             prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, nb_groups))
             prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, nb_groups))
             prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, nb_groups))
-
-            # inform survival times from KM analysis of WC data
-            time_h_to_c = 10
-            time_h_to_r = 10.1
-            time_h_to_d = 9.9
-            time_c_to_r = 18.3
-            time_c_to_d = 18.8
-        elif nb_groups == 9:
-            logging.info('Using 9 groups, corresponding to 10 year age bands.')
+        else:
+            logging.info('Using 9 age groups, corresponding to 10 year age bands.')
+            # from ferguson
+            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])
             # inform variables from the WC experience, controlling for age
-            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])  # from ferguson
+            # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
             prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
             prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
             prop_c_to_d = np.random.beta([0.1, 0.1, 0.1, 2, 14, 18, 12, 6, 2], [1.1, 1.1, 1.1, 5, 18, 20, 12, 4, 3], size=(nb_samples, nb_groups))
-
-            # inform survival times from KM analysis of WC data
-            time_h_to_c = 10
-            time_h_to_r = [[4, 12, 14.8, 8.1, 8.3, 12, 9.1, 15.2, 10.8]]
-            time_h_to_d = [[9.9, 9.9, 9.9, 7.6, 10.1, 13, 10, 11.2, 13.5]]
-            time_c_to_r = [[6, 2, 18.3, 18.3, 20.9, 15, 15.6, 13.9, 15]]
-            time_c_to_d = [[18.8, 18.8, 18.8, 18.8, 22.9, 14.1, 15.3, 22, 13.9]]
+            # time_h_to_c = 10
+            # time_h_to_r = [[4, 12, 14.8, 8.1, 8.3, 12, 9.1, 15.2, 10.8]]
+            # time_h_to_d = [[9.9, 9.9, 9.9, 7.6, 10.1, 13, 10, 11.2, 13.5]]
+            # time_c_to_r = [[6, 2, 18.3, 18.3, 20.9, 15, 15.6, 13.9, 15]]
+            # time_c_to_d = [[18.8, 18.8, 18.8, 18.8, 22.9, 14.1, 15.3, 22, 13.9]]
     else:
         # load df
         logging.info(f"Loading priors from {load_prior_file}")
@@ -229,25 +223,11 @@ def build_and_solve_model(t_obs,
     rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
     rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
-    y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    e0 = np.random.uniform(1e-9, 1e-6, size=(nb_samples, 1))
-    if nb_groups == 1:
-        # single population group, so we set accordingly
-        y0[:, :, 0] = (1 - e0) * total_pop
-        y0[:, :, 1] = e0 * total_pop
-    if nb_groups == 9:
-        # multiple population groups as a result of age bands
-        # have to proportion the starting populations respectively
-        df_start = pd.read_csv('data/Startpop_2density_0comorbidity.csv', index_col=0)
-        df_pop_prop = df_start.groupby('age').sum() / df_start['Population'].sum()
-        for i, row in enumerate(df_pop_prop.iterrows()):
-            y0[:, i, 0] = (1 - e0[:, 0]) * total_pop * row[1]['Population']
-            y0[:, i, 1] = e0[:, 0] * total_pop * row[1]['Population']
-    y0 = y0.reshape(-1)
+    y0, e0 = create_y0(args, nb_samples, nb_groups)
     t0 = -50
 
     model = SamplingNInfectiousModel(
-        nb_groups=nb_groups,
+        nb_groups=9 if args.age_groups else 1,
         beta=beta,
         rel_lockdown_beta=rel_lockdown_beta,
         rel_postlockdown_beta=rel_postlockdown_beta,
@@ -267,6 +247,8 @@ def build_and_solve_model(t_obs,
         time_h_to_d=time_h_to_d,
         time_c_to_r=time_c_to_r,
         time_c_to_d=time_c_to_d,
+        contact_heterogeneous=contact_heterogeneous,
+        contact_k=contact_k,
         y0=y0
     )
 
@@ -362,6 +344,52 @@ def build_and_solve_model(t_obs,
         del g
 
     del model, fig
+def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
+    if e0 is None:
+        e0 = np.random.uniform(1e-9, 1e-6, size=(nb_samples, 1))
+    y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
+    if not args.age_groups:
+        # single population group, so we set starting population accordingly
+        logging.info('Treating population homogeneously.')
+        df_pop = pd.read_csv('data/population.csv')
+        if args.fit_data.lower() == 'wc':
+            df_pop = df_pop['Western Cape']
+        elif args.fit_data.lower() == 'national':
+            df_pop = df_pop['Grand Total']
+        total_pop = df_pop.sum()
+        y0[:, :, 0] = (1 - e0) * total_pop
+        y0[:, :, 1] = e0 * total_pop
+    else:
+        # multiple population groups as a result of age bands
+        # have to proportion the starting populations respectively
+        logging.info('Treating population heterogenously by age.')
+        df_pop = pd.read_csv('data/population.csv')
+        df_pop = df_pop.groupby('ageband').sum()
+        over_80_rows = ['80-90', '90-100', '100+']
+        df_pop.loc['80+'] = df_pop.loc[over_80_rows].sum()
+        df_pop.drop(over_80_rows, inplace=True)
+        map_agebands_to_idx = {
+            '0-10': 0,
+            '10-20': 1,
+            '20-30': 2,
+            '30-40': 3,
+            '40-50': 4,
+            '50-60': 5,
+            '60-70': 6,
+            '70-80': 7,
+            '80+': 8
+        }
+        df_pop['idx'] = df_pop.index.map(map_agebands_to_idx).astype(int)
+        if args.fit_data.lower() == 'wc':
+            filter = 'Western Cape'
+        elif args.fit_data.lower() == 'national':
+            filter = 'Grand Total'
+        for i in range(nb_groups):
+            y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0]
+            y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0]
+    y0 = y0.reshape(-1)
+    return y0, e0
+
 
 
 def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
@@ -542,7 +570,7 @@ def calculate_resample(t_obs,
                        i_h_obs,
                        i_icu_obs,
                        d_icu_obs,
-                       total_pop: int = 1,
+                       args=None,
                        model_base='data/model'):
     with open(f'{model_base}_scalar.pkl', 'rb') as f:
         scalar_vars = pickle.load(f)
@@ -572,20 +600,7 @@ def calculate_resample(t_obs,
     e0 = resample_vars.pop('e0')
     # groups = resample_vars.pop('group')
 
-    y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
-    if nb_groups == 1:
-        y0[:, :, 0] = (1 - e0) * total_pop
-        y0[:, :, 1] = e0 * total_pop
-    elif nb_groups == 9:
-        # TODO: Make y0 resamplig a thing
-        # multiple population groups as a result of age bands
-        # have to proportion the starting populations respectively
-        df_start = pd.read_csv('data/Startpop_2density_0comorbidity.csv', index_col=0)
-        df_pop_prop = df_start.groupby('age').sum() / df_start['Population'].sum()
-        for i, row in enumerate(df_pop_prop.iterrows()):
-            y0[:, i, 0] = (1 - e0[:, 0]) * total_pop * row[1]['Population']
-            y0[:, i, 1] = e0[:, 0] * total_pop * row[1]['Population']
-    y0 = y0.reshape(-1)
+    y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
 
     logging.info('Creating resampled model')
     model = SamplingNInfectiousModel(
