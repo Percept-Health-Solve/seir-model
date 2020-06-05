@@ -39,7 +39,13 @@ parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
 
 
 def main():
-    args = parser.parse_args()
+    """Main script executing all required functionality. Use the command line option `-h` to see all options. This
+    script checks the given command arguments for errors, and then sets up a sampling model and solves it according
+    to the given arguemnts. If valid, the arguments are saved to a config json in the '--output_dir' directiory. Once
+    the model is saved, it saves the parameters of the model according to the '--output_dir' and '--model_name' flags.
+    It will then plot and save the plots of the model.
+    """
+    args = parser.parse_args()  # parse command line arguments
 
     if args.from_config:
         # load arguments from config, but allow them to be overwritten by the command prompt
@@ -48,10 +54,8 @@ def main():
             raise ValueError(f"Given configuration file '{args.from_config}' is either not a file or does not exist.")
         with open(json_dir, 'rt') as f:
             json_args = argparse.Namespace()
-            json_args.__dict__.update(json.load(f))
-            args = parser.parse_args(namespace=json_args)
-
-    output_dir = Path(args.output_dir)
+            json_args.__dict__.update(json.load(f))  # load variables from json file
+            args = parser.parse_args(namespace=json_args)  # overwrite the loaded variable with command arguments
 
     if args.load_prior_file:
         load_prior_file = Path(args.load_prior_file)
@@ -61,11 +65,12 @@ def main():
     else:
         load_prior_file = None
 
-    # check output directory
+    # check if output directory is valid
+    output_dir = Path(args.output_dir)
     if not output_dir.is_dir():
         raise ValueError(f'Given directory "{args.output_dir}" is either not a directory or does not exist.')
 
-    # check if files exist:
+    # check if files exist in output directory, and if those files are relted to our model
     if args.nb_runs > 1:
         model_files = list(output_dir.glob(f'run*_{args.model_name}*'))
         if len(model_files) > 0 and not args.overwrite:
@@ -81,9 +86,12 @@ def main():
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -- %(message)s',
                         datefmt='%H:%M:%S',
                         level=logging.INFO)
+
+    # log training runs and samples
     logging.warning(f"Training model for {args.nb_runs} run(s) with {args.nb_samples} samples "
                     f"and {args.ratio_resample * 100:.1f}% resamples.")
 
+    # log variables we are fitting to
     if args.fit_detected or args.fit_hospitalised or args.fit_icu or args.fit_deaths:
         logging.warning(f"Fitting to {'detected, ' if args.fit_detected else ''}"
                         f"{'hospitalised, ' if args.fit_hospitalised else ''}"
@@ -146,6 +154,22 @@ def build_and_solve_model(t_obs,
                           d_icu_obs=None,
                           args=None,
                           load_prior_file: Path = None,
+                          model_base: Path = Path('data/model')):
+    """Build and solve a sampling model, fitting to the given observed variables at the observed time.
+
+    :param t_obs: Time at which observations are made.
+    :param i_d_obs: Detected observed cases.
+    :param i_h_obs: Hospitalised observed cases.
+    :param i_icu_obs: ICU observed cases.
+    :param d_icu_obs: Deceased observed cases.
+    :param args: Command line arguments.
+    :param total_pop: Total population to consider.
+    :param load_prior_file: Loads proportions from a prior csv file. This should be generated from a previous fit.
+    :param model_base: The model base directory. Defaults to 'data/model', where 'data/' is the output_dir and 'model'
+    is the model name. Saves plots to '{model_base}_priors_posterior.png', and '{model_base}_joint_posterior.png'.
+    We also save the models variables to '{model_base}_*.pkl'. See the model documentation for more information on the
+    model variables.
+    """
     if args.age_groups:
         logging.warning('Splitting the population into 10 year age bands when fitting')
         nb_groups = 9  # 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+ making 9 age groups
@@ -252,12 +276,6 @@ def build_and_solve_model(t_obs,
         y0=y0
     )
 
-    # get y_t.min() from y0
-    # logging.info('Solving for y at minimum data time')
-    # tt = np.linspace(t0, t_obs.min(), 20)
-    # y_tmin = model.solve(tt)[-1]
-    # y_tmin = y_tmin.reshape(-1)
-
     # fit to data
 
     ratio_as_detected = 0
@@ -286,8 +304,8 @@ def build_and_solve_model(t_obs,
     resample_vars['e0'] = e0_resample
     scalar_vars['t0'] = t0
 
-    # save variables
-    save_vars_to_csv(model, base=model_base)
+    # save model variables
+    save_model_variables(model, base=model_base)
 
     # reshape to a dataframe for pair plotting
     df_resample = pd.DataFrame(index=range(model.nb_resamples))
@@ -391,8 +409,13 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
     return y0, e0
 
 
+def save_model_variables(model: SamplingNInfectiousModel, base='data/samples'):
+    """Saves a sampling models varibles (stored as dictionary) for use later.
 
-def save_vars_to_csv(model: SamplingNInfectiousModel, base='data/samples'):
+    :param model: A solved sampling model.
+    :param base: The base directory at which to store the variables. Default is 'data/model', where 'data/' is the
+    outputdirectory and 'model' is the model name.
+    """
     nb_groups = model.nb_groups
     scalar_vars = model.scalar_vars
     group_vars = model.group_vars
@@ -459,11 +482,15 @@ def load_data_WC(remove_small: bool = True):
                               date_parser=lambda t: pd.to_datetime(t, format='%Y-%m-%d'))
 
     # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
-    max_date = pd.to_datetime('2020/05/14')
+    max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['date'].max()])
+    max_date = max_date - datetime.timedelta(days=3)  # max date set as 3 days prior to shared maximum date
+
+    # filter out maximum date
     df_deaths = df_deaths[df_deaths['date'] <= max_date]
     df_confirmed = df_confirmed[df_confirmed['date'] <= max_date]
     df_hosp_icu = df_hosp_icu[df_hosp_icu['date'] <= max_date]
 
+    # sort by date
     df_deaths = df_deaths.sort_values('date')
     df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('date')
@@ -590,15 +617,8 @@ def calculate_resample(t_obs,
     logging.info(f"Samples: {nb_samples}")
     logging.info(f"Groups: {nb_groups}")
 
-    # resample_vars = {}
-    # for col in df_resample:
-    #     resample_vars[col] = df_resample[col].to_numpy()
-    # for key, value in resample_vars.items():
-    #     resample_vars[key] = value.reshape(nb_samples, nb_groups)
-
     t0 = scalar_vars.pop('t0')
     e0 = resample_vars.pop('e0')
-    # groups = resample_vars.pop('group')
 
     y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
 
