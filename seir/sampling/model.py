@@ -34,6 +34,8 @@ class SamplingNInfectiousModel:
                  time_h_to_d=None,
                  time_c_to_r=None,
                  time_c_to_d=None,
+                 contact_heterogeneous: bool = False,
+                 contact_k: float = None,
                  y0=None,
                  imported_func=None):
         logging.info('Initizializing model')
@@ -62,6 +64,11 @@ class SamplingNInfectiousModel:
         time_h_to_d = np.asarray(time_h_to_d)
         time_c_to_r = np.asarray(time_c_to_r)
         time_c_to_d = np.asarray(time_c_to_d)
+
+        # contact heterogeneity variables
+        if contact_heterogeneous and contact_k is None:
+            raise ValueError("Setting a heterogenous contact model model requires setting the 'contact_k' variable!")
+        contact_k = np.asarray(contact_k)
 
         # calculated vars
         r0 = beta * time_infectious  # TODO: Calculate r0 as leading eigenvalue of NGM
@@ -116,6 +123,10 @@ class SamplingNInfectiousModel:
             'time_i_to_c': time_i_to_c
         }
 
+        contact_vars = {
+            'contact_k': contact_k,
+        }
+
         # assert specific properties of variables
         for key, value in beta_vars.items():
             assert np.all(beta >= 0), f"Value in '{key}' is smaller than 0"
@@ -124,6 +135,8 @@ class SamplingNInfectiousModel:
             assert np.all(value >= 0), f"Value in proportion '{key}' is smaller than 0"
         for key, value in time_vars.items():
             assert np.all(value > 0), f"Value in time '{key}' is smaller than or equal to 0"
+        for key, value in contact_vars.items():
+            assert np.all(value > 0), f"Value in '{key} is smaller than or equal to 0."
 
         # check if calculated vars obey constraints
         # only need to check the few that aren't caught by the above checks
@@ -145,7 +158,8 @@ class SamplingNInfectiousModel:
         nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
             **beta_vars,
             **prop_vars,
-            **time_vars
+            **time_vars,
+            **contact_vars
         }, nb_groups)
 
         # do the same for the calculated variables
@@ -223,6 +237,10 @@ class SamplingNInfectiousModel:
         self.time_c_to_r = time_c_to_r
         self.time_c_to_d = time_c_to_d
 
+        # contact proprties
+        self.contact_heterogeneous = contact_heterogeneous
+        self.contact_k = contact_k
+
         # y0 properties
         self.y0 = y0
         self.n = n
@@ -232,6 +250,7 @@ class SamplingNInfectiousModel:
         self.prop_vars = prop_vars
         self.time_vars = time_vars
         self.calculated_vars = calculated_vars
+        self.contact_vars = contact_vars
 
         # scalar, group, and sample properties
         self.scalar_vars = scalar_vars
@@ -266,8 +285,14 @@ class SamplingNInfectiousModel:
         infectious_strength = np.sum(self.rel_beta_as * i_a + i_m + i_s, axis=1, keepdims=True)
 
         # solve seird equations
-        ds = - 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s
-        de = 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s - e / self.time_incubate
+        if not self.contact_heterogeneous:
+            ds = - 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s
+            de = 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s - e / self.time_incubate
+        else:
+            ds = - self.contact_k * np.log1p(self.infectious_func(t) * self.beta * infectious_strength /
+                                             (self.contact_k * self.n)) * s
+            de = self.contact_k * np.log1p(self.infectious_func(t) * self.beta * infectious_strength /
+                                           (self.contact_k * self.n)) * s - e / self.time_incubate
 
         di_a = self.prop_a * e / self.time_incubate - i_a / self.time_infectious
         di_m = self.prop_m * e / self.time_incubate - i_m / self.time_infectious
