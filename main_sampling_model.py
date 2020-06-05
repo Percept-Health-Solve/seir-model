@@ -6,6 +6,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+from scipy.special import softmax
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -36,6 +37,7 @@ parser.add_argument('--prop_as_range', type=float, default=[0.75, 0.75], nargs=2
                     help='Lower and upper bounds for the prop_as uniform distribution')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
+parser.add_argument('--only_process_runs', action='store_true')
 
 
 def main():
@@ -147,6 +149,52 @@ def main():
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
 
+def process_multi_run(nb_runs, nb_samples, nb_resamples, output_dir, model_name):
+    full_samples = None
+    for i in range(nb_runs):
+        model_run_base = output_dir.joinpath(f'{i:02}_{model_name}')
+        fp = f'{model_run_base}_sample.pkl'
+        logging.info(f'fp')
+        with open(fp, 'rb') as f:
+            samples = pickle.load(f)
+            assert isinstance(samples, dict)
+        if full_samples is None:
+            full_samples = samples
+        else:
+            for key, value in full_samples.items():
+                full_samples[key] = np.concatenate([value, samples[key]], axis=0)
+
+    log_weights = full_samples['log_weights']
+    weights = softmax(log_weights)
+
+    resample_indices = np.random.choice(nb_samples, nb_resamples, p=weights)
+
+    resample_vars = {}
+    for key, value in full_samples.items():
+        resample_vars[key] = value[resample_indices]
+        print(key, resample_vars[key].shape)
+    resample_vars.pop('log_weights')
+
+    model_base = output_dir.joinpath(f'{model_name}')
+
+    with open(f'{model_base}_resample.pkl', 'wb') as f:
+        pickle.dump(resample_vars, f)
+    with open(f'{model_base}_sample.pkl', 'wb') as f:
+        pickle.dump(full_samples, f)
+
+    with open(f'{model_run_base}_scalar.pkl', 'rb') as f:
+        scalar = pickle.load(f)
+    with open(f'{model_run_base}_group.pkl', 'rb') as f:
+        group = pickle.load(f)
+
+    with open(f'{model_base}_scalar.pkl', 'wb') as f:
+        pickle.dump(scalar, f)
+    with open(f'{model_base}_group.pkl', 'wb') as f:
+        pickle.dump(group, f)
+
+    plot_prior_posterior(model_base, full_samples, resample_vars)
+
+
 def build_and_solve_model(t_obs,
                           i_d_obs=None,
                           i_h_obs=None,
@@ -218,25 +266,51 @@ def build_and_solve_model(t_obs,
             # time_c_to_d = [[18.8, 18.8, 18.8, 18.8, 22.9, 14.1, 15.3, 22, 13.9]]
     else:
         # load df
-        logging.info(f"Loading priors from {load_prior_file}")
-        df_priors = pd.read_csv(load_prior_file)
-        nb_prior_groups = int(df_priors['group'].max() + 1)
-        nb_prior_samples = int(len(df_priors) / nb_prior_groups)
+        logging.info(f"Loading proportion priors from {load_prior_file}")
+
+        if load_prior_file.suffix == '.csv':
+            logging.info('Loading csv file')
+            df_priors = pd.read_csv(load_prior_file)
+            nb_prior_groups = int(df_priors['group'].max() + 1)
+            nb_prior_samples = int(len(df_priors) / nb_prior_groups)
+
+            # get mean variables
+            get_mean = lambda x: df_priors[x].to_numpy() \
+                .reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0)
+
+        elif load_prior_file.suffix == '.pkl':
+            logging.info('Loading pkl file')
+            df_priors = pickle.load(load_prior_file.open('rb'))
+            nb_prior_groups = 1
+            nb_prior_samples = None
+            for key, value in df_priors.items():
+                nb_prior_groups = np.max([nb_prior_groups, value.shape[-1]])
+                if nb_prior_samples is None:
+                    nb_prior_samples = value.shape[0]
+                else:
+                    assert nb_prior_samples == value.shape[0]
+
+            # get mean variables
+            get_mean = lambda x: df_priors[x].repeat(nb_repeats, axis=0)
+
         nb_repeats = int(nb_samples / nb_prior_samples)
 
         # fix number of samples accordingly
         nb_samples = nb_repeats * nb_prior_samples
 
-        # get mean variables
-        get_mean = lambda x: df_priors[x].to_numpy() \
-            .reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0)
-
         # set random vars
         random_scale = 0.01
         time_infectious = np.random.normal(get_mean('time_infectious'), scale=random_scale)
-        prop_a = np.random.normal(get_mean('prop_a'), scale=random_scale).clip(min=0, max=1)
+        # TODO: Change these if else statements, rather use a default value in the function instead?
+        if 'prop_a' in df_priors:
+            prop_a = np.random.normal(get_mean('prop_a'), scale=random_scale).clip(min=0, max=1)
+        else:
+            prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
-        prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
+        if 'prop_s_to_h' in df_priors:
+            prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
+        else:
+            prop_s_to_h = 0.8875
         prop_h_to_c = np.random.normal(get_mean('prop_h_to_c'), scale=random_scale).clip(min=0, max=1)
         prop_h_to_d = np.random.normal(get_mean('prop_h_to_d'), scale=random_scale).clip(min=0, max=1)
         prop_c_to_d = np.random.normal(get_mean('prop_c_to_d'), scale=random_scale).clip(min=0, max=1)
@@ -290,6 +364,7 @@ def build_and_solve_model(t_obs,
                                   smoothing=1,
                                   group_total=True)
 
+    # get dictionaries from model after solving
     sample_vars = model.sample_vars
     resample_vars = model.resample_vars
     scalar_vars = model.scalar_vars
@@ -314,8 +389,27 @@ def build_and_solve_model(t_obs,
             df_resample[f'{key}_{i}'] = value[:, i]
 
     # plot variables of interest
-    logging.info('Plotting prior and posterior distributions')
     sns.set(style='darkgrid')
+    plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_vars, calc_resample_vars)
+
+    if len(df_resample.columns) <= 20:
+        logging.info('Building joint distribution plot')
+        g = sns.PairGrid(df_resample, corner=True)
+        try:
+            g = g.map_lower(sns.kdeplot, colors='C0')
+            g = g.map_diag(sns.distplot)
+        except np.linalg.LinAlgError:
+            logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
+        g.savefig(f'{model_base}_joint_posterior.png')
+        plt.clf()
+        del g
+
+    del model, fig
+
+
+def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_vars=None, calc_resample_vars=None):
+    logging.info('Plotting prior and posterior distributions')
+
     fig, axes = plt.subplots(10, 10, figsize=(30, 30))
     axes = axes.flat
 
@@ -332,36 +426,25 @@ def build_and_solve_model(t_obs,
             axes[ax_idx].axvline(value[:, i].mean(), ls='--')
             axes[ax_idx].set_title(f'{key}_{i}')
             ax_idx += 1
-    logging.info('Adding calculated variables')
-    for key, value in calc_resample_vars.items():
-        for i in range(value.shape[-1]):
-            logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
-            try:
-                sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
-            except np.linalg.LinAlgError:
-                logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
-            sns.distplot(calc_sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
-            axes[ax_idx].axvline(value[:, i].mean(), ls='--')
-            axes[ax_idx].set_title(f'{key}_{i}')
-            ax_idx += 1
+    if calc_resample_vars is not None and calc_sample_vars is not None:
+        logging.info('Adding calculated variables')
+        for key, value in calc_resample_vars.items():
+            for i in range(value.shape[-1]):
+                logging.info(f'{key}_{i}: mean = {value[:, i].mean():.3f} - std = {value[:, i].std():.3f}')
+                try:
+                    sns.distplot(value[:, i], ax=axes[ax_idx], color='C0')
+                except np.linalg.LinAlgError:
+                    logging.warning(f'Plotting of posterior failed for {key}_{i} due to posterior collapse')
+                sns.distplot(calc_sample_vars[key][:, i], ax=axes[ax_idx], color='C1')
+                axes[ax_idx].axvline(value[:, i].mean(), ls='--')
+                axes[ax_idx].set_title(f'{key}_{i}')
+                ax_idx += 1
 
     plt.tight_layout()
     fig.savefig(f'{model_base}_priors_posterior.png')
     plt.clf()
 
-    if len(df_resample.columns) <= 20:
-        logging.info('Building joint distribution plot')
-        g = sns.PairGrid(df_resample, corner=True)
-        try:
-            g = g.map_lower(sns.kdeplot, colors='C0')
-            g = g.map_diag(sns.distplot)
-        except np.linalg.LinAlgError:
-            logging.warning(f'Plotting of joint distribution failed due to posterior collapse')
-        g.savefig(f'{model_base}_joint_posterior.png')
-        plt.clf()
-        del g
 
-    del model, fig
 def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
     if e0 is None:
         e0 = np.random.uniform(1e-9, 1e-6, size=(nb_samples, 1))
