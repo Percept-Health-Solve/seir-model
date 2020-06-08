@@ -156,12 +156,12 @@ def main():
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
 
-def process_multi_run(nb_runs, nb_samples, nb_resamples, output_dir, model_name):
+def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
     full_samples = None
     for i in range(nb_runs):
         model_run_base = output_dir.joinpath(f'{i:02}_{model_name}')
         fp = f'{model_run_base}_sample.pkl'
-        logging.info(f'fp')
+        logging.info(f'Loading samples from {fp}')
         with open(fp, 'rb') as f:
             samples = pickle.load(f)
             assert isinstance(samples, dict)
@@ -173,6 +173,8 @@ def process_multi_run(nb_runs, nb_samples, nb_resamples, output_dir, model_name)
 
     log_weights = full_samples['log_weights']
     weights = softmax(log_weights)
+    nb_samples = len(weights)
+    logging.info(f'Processed {nb_samples} total samples from {nb_runs} runs')
 
     resample_indices = np.random.choice(nb_samples, nb_resamples, p=weights)
 
