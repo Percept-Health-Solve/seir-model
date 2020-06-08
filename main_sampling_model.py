@@ -16,7 +16,6 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nb_samples', type=int, default=1000000, help='Number of initial samples per run')
-parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
 parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proportion of resamples per run')
 parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
@@ -26,6 +25,7 @@ parser.add_argument('--fit_hospitalised', action='store_true', help='Fit the mod
 parser.add_argument('--fit_icu', action='store_true', help='Fit the model to detected data')
 parser.add_argument('--fit_deaths', action='store_true', help='Fit the model to death data')
 parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to 'WC' or 'national' data")
+parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
 parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
 parser.add_argument('--from_config', type=str, help='Load model config from given json file')
