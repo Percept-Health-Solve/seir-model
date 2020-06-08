@@ -375,7 +375,8 @@ def build_and_solve_model(t_obs,
                                   ratio_s_detected=ratio_s_detected,
                                   ratio_resample=ratio_resample,
                                   smoothing=1,
-                                  group_total=True)
+                                  group_total=True,
+                                  likelihood=args.likelihood)
 
     # get dictionaries from model after solving
     sample_vars = model.sample_vars

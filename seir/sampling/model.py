@@ -451,10 +451,14 @@ class SamplingNInfectiousModel:
             log_weights_hospital, sigma_hospital = _log_lognormal(h_obs, h_tot)
             log_weights_icu, sigma_icu = _log_lognormal(c_obs, c_tot)
             log_weights_dead, sigma_dead = _log_lognormal(deaths_obs, detected)
-            self.calculated_sample_vars['sigma_detected'] = sigma_detected
-            self.calculated_sample_vars['sigma_hospital'] = sigma_hospital
-            self.calculated_sample_vars['sigma_icu'] = sigma_icu
-            self.calculated_sample_vars['sigma_dead'] = sigma_dead
+            if sigma_detected.ndim > 0:
+                self.calculated_sample_vars['sigma_detected'] = sigma_detected
+            if sigma_hospital.ndim > 0:
+                self.calculated_sample_vars['sigma_hospital'] = sigma_hospital
+            if sigma_icu.ndim > 0:
+                self.calculated_sample_vars['sigma_icu'] = sigma_icu
+            if sigma_dead.ndim > 0:
+                self.calculated_sample_vars['sigma_dead'] = sigma_dead
 
 
         # Free up memory at this point
@@ -592,7 +596,7 @@ def _determine_sample_vars(vars: dict, nb_groups):
 
 def _log_poisson(k, l):
     if k is None:
-        return 0
+        return np.array(0)
     out = k * np.log(l+1E-20) - l - gammaln(k+1)
     out = np.sum(out, axis=(0, 2))
     return out
@@ -600,7 +604,7 @@ def _log_poisson(k, l):
 
 def _log_lognormal(observed, recorded):
     if observed is None:
-        return (0, 0)
-    sigma = np.mean((np.log(recorded) - np.log(observed))**2, axis=(0, 2), keepdims=True)
-    log_weights = -1/2 * np.log(2 * np.pi * sigma**2) - (np.log(recorded) - np.log(observed))**2 / 2 * sigma**2
+        return (np.array(0), np.array(0))
+    sigma = np.sqrt(np.mean((np.log(recorded) - np.log(observed))**2, axis=(0, 2), keepdims=True))
+    log_weights = -1/2 * np.log(2 * np.pi * sigma**2) - (np.log(recorded) - np.log(observed))**2 / (2 * sigma**2)
     return np.sum(log_weights, axis=(0, 2)), sigma.reshape(-1, 1)
