@@ -181,7 +181,6 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
     resample_vars = {}
     for key, value in full_samples.items():
         resample_vars[key] = value[resample_indices]
-        print(key, resample_vars[key].shape)
     resample_vars.pop('log_weights')
 
     model_base = output_dir.joinpath(f'{model_name}')
