@@ -393,7 +393,11 @@ class SamplingNInfectiousModel:
                                 ratio_resample: float = 0.1,
                                 y0=None,
                                 smoothing=1,
-                                group_total: bool = False):
+                                group_total: bool = False,
+                                likelihood='lognormal'):
+        if likelihood.lower() not in ['lognormal', 'poisson']:
+            raise ValueError(f"Variable 'likelihood' should be either 'lognormal' or 'poisson', "
+                             f"got {likelihood} instead.")
         # number of resamples
         m = int(np.round(self.nb_samples * ratio_resample))
 
@@ -436,10 +440,23 @@ class SamplingNInfectiousModel:
 
         # model detected cases as poisson distribution y~P(lambda=detected_cases)
         logging.info('Calculating log weights')
-        log_weights_detected = 0 if det_obs is None else _log_poisson(det_obs, detected)
-        log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_tot)
-        log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_tot)
-        log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_tot)
+        if likelihood.lower() == 'poisson':
+            logging.info('Using Poisson distribution for likelihood calculation')
+            log_weights_detected = _log_poisson(det_obs, detected)
+            log_weights_hospital = _log_poisson(h_obs, h_tot)
+            log_weights_icu = _log_poisson(c_obs, c_tot)
+            log_weights_dead = _log_poisson(deaths_obs, d_tot)
+        elif likelihood.lower() == 'lognormal':
+            logging.info('Using log-normal distribution for likelihood calculation')
+            log_weights_detected, sigma_detected = _log_lognormal(det_obs, detected)
+            log_weights_hospital, sigma_hospital = _log_lognormal(h_obs, h_tot)
+            log_weights_icu, sigma_icu = _log_lognormal(c_obs, c_tot)
+            log_weights_dead, sigma_dead = _log_lognormal(deaths_obs, detected)
+            self.calculated_sample_vars['sigma_detected'] = sigma_detected
+            self.calculated_sample_vars['sigma_hospital'] = sigma_hospital
+            self.calculated_sample_vars['sigma_icu'] = sigma_icu
+            self.calculated_sample_vars['sigma_dead'] = sigma_dead
+
 
         # Free up memory at this point
         del s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c
@@ -575,6 +592,16 @@ def _determine_sample_vars(vars: dict, nb_groups):
 
 
 def _log_poisson(k, l):
+    if k is None:
+        return 0
     out = k * np.log(l+1E-20) - l - gammaln(k+1)
     out = np.sum(out, axis=(0, 2))
     return out
+
+
+def _log_lognormal(observed, recorded):
+    if observed is None:
+        return (0, 0)
+    sigma = np.mean((np.log(recorded) - np.log(observed))**2, axis=(0, 2), keepdims=True)
+    log_weights = -1/2 * np.log(2 * np.pi * sigma**2) - (np.log(recorded) - np.log(observed))**2 / 2 * sigma**2
+    return np.sum(log_weights, axis=(0, 2)), sigma.reshape(-1, 1)

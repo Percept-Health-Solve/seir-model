@@ -38,6 +38,8 @@ parser.add_argument('--prop_as_range', type=float, default=[0.75, 0.75], nargs=2
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
 parser.add_argument('--only_process_runs', action='store_true')
+parser.add_argument('--likelihood', type=str, default='lognormal',
+                    help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
 
 
 def main():
