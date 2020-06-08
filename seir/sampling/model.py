@@ -75,8 +75,7 @@ class SamplingNInfectiousModel:
 
         prop_s = 1 - prop_a - prop_m
         prop_s_to_c = 1 - prop_s_to_h
-        # TODO: Remove prop_h_to_r clip in favor of appropriate sampling criteria
-        prop_h_to_r = np.clip(1 - prop_h_to_c - prop_h_to_d, 0, 1)
+        prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
         prop_c_to_r = 1 - prop_c_to_d
 
         time_i_to_h = time_s_to_h - time_infectious
