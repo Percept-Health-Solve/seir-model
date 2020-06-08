@@ -113,12 +113,14 @@ def main():
                          f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
 
     # save model args to config file
-    with open(output_dir.joinpath(f"{args.model_name}_config.json"), 'wt') as f:
-        # save the json, but don't include the overwrite or from_json commands
-        cmds = vars(args)
-        cmds.pop('overwrite', None)
-        cmds.pop('from_json', None)
-        json.dump(cmds, f, indent=4)
+    if not args.only_process_runs:
+        with open(output_dir.joinpath(f"{args.model_name}_config.json"), 'wt') as f:
+            # save the json, but don't include the overwrite or from_json commands
+            cmds = vars(args).copy()
+            cmds.pop('overwrite', None)
+            cmds.pop('from_json', None)
+            cmds.pop('only_process_runs', None)
+            json.dump(cmds, f, indent=4)
 
     detected_fit = i_d_obs if args.fit_detected else None
     h_fit = i_h_obs if args.fit_hospitalised else None
