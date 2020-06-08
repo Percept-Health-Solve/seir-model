@@ -266,7 +266,7 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
-            prop_h_to_c = np.array([[1/81, 1/81, 1/81, 7/184, 32/200, 38/193, 24/129, 10, 88, 5/31]])
+            prop_h_to_c = np.array([[1/81, 1/81, 1/81, 7/184, 32/200, 38/193, 24/129, 10/88, 5/31]])
             prop_h_to_d = np.array([[0, 0, 0, 7/177, 8/168, 23/155, 28/105, 26/78, 11/26]])
             prop_c_to_d = np.array([[0.1, 0.1, 0.1, 2/7, 14/32, 18/38, 12/24, 6/10, 2/5]])
             # prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
