@@ -137,16 +137,21 @@ def main():
                                                                     load_prior_file=load_prior_file,
                                                                     model_base=save_dir)
 
+    model_base = output_dir.joinpath(f'{args.model_name}')
     if args.nb_runs > 1:
-        for run in range(args.nb_runs):
-            model_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
-            logging.info(f'Executing run {run + 1}')
-            _build_and_solve_model(model_base)
-            calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
+        if not args.only_process_runs:
+            for run in range(args.nb_runs):
+                model_run_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
+                logging.info(f'Executing run {run + 1}')
+                _build_and_solve_model(model_run_base)
+                calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_run_base)
         # process runs to single output
-
+        logging.info(f'Processing results from {args.nb_runs} runs')
+        nb_process_resamples = int(args.ratio_resample * args.nb_runs * args.nb_samples)
+        process_multi_run(args.nb_runs, nb_process_resamples, output_dir, args.model_name)
+        calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
     else:
-        model_base = output_dir.joinpath(f'{args.model_name}')
+
         _build_and_solve_model(model_base)
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
