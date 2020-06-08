@@ -414,7 +414,7 @@ def build_and_solve_model(t_obs,
         plt.clf()
         del g
 
-    del model, fig
+    del model
 
 
 def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_vars=None, calc_resample_vars=None):
