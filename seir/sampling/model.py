@@ -393,10 +393,26 @@ class SamplingNInfectiousModel:
                                 y0=None,
                                 smoothing=1,
                                 group_total: bool = False,
-                                likelihood='lognormal'):
+                                likelihood='lognormal',
+                                fit_interval: int = 0,
+                                fit_new_deaths: bool = False):
         if likelihood.lower() not in ['lognormal', 'poisson']:
             raise ValueError(f"Variable 'likelihood' should be either 'lognormal' or 'poisson', "
                              f"got {likelihood} instead.")
+        assert fit_interval == int(fit_interval), \
+            f"'fit_interval' should be a whole number, got {fit_interval} instead"
+        if fit_interval < 0:
+            raise ValueError(f"'fit_interval' must be greater than 0, got {fit_interval} instead")
+        if fit_interval == 0:
+            logging.info("Fitting to all data")
+        else:
+            logging.info(f"Fitting to data in {fit_interval} day intervals")
+            # we implicitly require t_obs to be monotonically increasing covering every day from now to the end of t_obs
+            assert np.all(np.diff(t_obs) > 0), "'t_obs' must be monotonically increasing"
+            assert np.all(np.diff(t_obs) == 1), "'t_obs' values must contain all days between its bounds"
+        if fit_new_deaths:
+            logging.info(f'Fitting to new deaths in {fit_interval} day intervals')
+
         # number of resamples
         m = int(np.round(self.nb_samples * ratio_resample))
 
@@ -407,6 +423,19 @@ class SamplingNInfectiousModel:
         h_obs = None if h_obs is None else np.asarray(h_obs).reshape(-1, 1, 1).astype(int)
         c_obs = None if c_obs is None else np.asarray(c_obs).reshape(-1, 1, 1).astype(int)
         deaths_obs = None if deaths_obs is None else np.asarray(deaths_obs).reshape(-1, 1, 1).astype(int)
+
+        if fit_interval > 0:
+            # slice variables to match the fitting period
+            old_data_len = len(t_obs)
+            slice_var = lambda x: None if x is None else x[:(len(x) - 1) // fit_interval * fit_interval + 1:fit_interval]
+            det_obs = slice_var(det_obs)
+            h_obs = slice_var(h_obs)
+            c_obs = slice_var(c_obs)
+            deaths_obs = slice_var(deaths_obs)
+            t_obs = slice_var(t_obs)
+            new_data_len = len(t_obs)
+            logging.warning(f'Had {old_data_len} data samples, now using {new_data_len} samples '
+                            f'due to fitting to data in {fit_interval} day intervals.')
 
         # assert shapes
         assert t0.ndim == 0, "t0 should be a scalar, not a vector"
@@ -437,6 +466,11 @@ class SamplingNInfectiousModel:
             c_tot = np.sum(c_tot, axis=2, keepdims=True)
             d_tot = np.sum(d_tot, axis=2, keepdims=True)
 
+        # take diff if fitting to new death cases instead of cumulative
+        if fit_new_deaths:
+            d_tot = np.diff(d_tot, axis=0)
+            deaths_obs = np.diff(deaths_obs, axis=0)
+
         # model detected cases as poisson distribution y~P(lambda=detected_cases)
         logging.info('Calculating log weights')
         if likelihood.lower() == 'poisson':
@@ -450,7 +484,7 @@ class SamplingNInfectiousModel:
             log_weights_detected, sigma_detected = _log_lognormal(det_obs, detected)
             log_weights_hospital, sigma_hospital = _log_lognormal(h_obs, h_tot)
             log_weights_icu, sigma_icu = _log_lognormal(c_obs, c_tot)
-            log_weights_dead, sigma_dead = _log_lognormal(deaths_obs, detected)
+            log_weights_dead, sigma_dead = _log_lognormal(deaths_obs, d_tot)
             if sigma_detected.ndim > 0:
                 self.calculated_sample_vars['sigma_detected'] = sigma_detected
             if sigma_hospital.ndim > 0:

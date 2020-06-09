@@ -40,6 +40,9 @@ parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
 parser.add_argument('--only_process_runs', action='store_true')
 parser.add_argument('--likelihood', type=str, default='lognormal',
                     help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
+parser.add_argument('--fit_interval', type=int, default=0,
+                    help='Number of days between which to consider fitting. Zero indicates fitting to all data.')
+parser.add_argument('--fit_new_deaths', action='store_true', help='Fit to new deaths instead of cumulative deaths')
 
 
 def main():
@@ -376,7 +379,9 @@ def build_and_solve_model(t_obs,
                                   ratio_resample=ratio_resample,
                                   smoothing=1,
                                   group_total=True,
-                                  likelihood=args.likelihood)
+                                  likelihood=args.likelihood,
+                                  fit_interval=args.fit_interval,
+                                  fit_new_deaths=args.fit_new_deaths)
 
     # get dictionaries from model after solving
     sample_vars = model.sample_vars
@@ -461,7 +466,7 @@ def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_var
 
 def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
     if e0 is None:
-        e0 = np.random.uniform(1e-9, 1e-6, size=(nb_samples, 1))
+        e0 = np.random.uniform(0, 1e-6, size=(nb_samples, 1))
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
     if not args.age_groups:
         # single population group, so we set starting population accordingly
@@ -704,6 +709,8 @@ def calculate_resample(t_obs,
         resample_vars = pickle.load(f)
     nb_groups = 1
     nb_samples = None
+    for key, value in group_vars.items():
+        nb_groups = np.max([nb_groups, value.shape[-1]])
     for key, value in resample_vars.items():
         nb_groups = np.max([nb_groups, value.shape[-1]])
         if nb_samples is None:
@@ -818,8 +825,8 @@ def calculate_resample(t_obs,
     plt.clf()
 
     # TODO: use code from utils
-    ratio_as_detected = 0
-    ratio_m_detected = 0.3
+    ratio_as_detected = 1
+    ratio_m_detected = 1
     ratio_s_detected = 1
 
     cum_detected_samples = ratio_as_detected * (i_a + r_a) + ratio_m_detected * (i_m + r_m) \
