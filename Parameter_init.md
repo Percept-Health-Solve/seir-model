@@ -2,6 +2,8 @@
 
 Last updated: 10 June 2020. Parameter values/distributions shown only for age-banded model.
 
+Calibration is done through the use of sampling-importance-resampling (Rubin 1987).
+
 ## Parameter values
 
 There are four different types of parameter in the model:
@@ -19,7 +21,7 @@ There are four different types of parameter in the model:
 ### Controlling parameters
 
 * ```--nb_runs``` is the number of runs (split up this way to avoid overburdening memory)
-* ```--nb_samples``` is the number of samples; the product of these two variables is 2,000,000 by default
+* ```--nb_samples``` is the number of samples; the product of ```nb_runs``` and ```nb_samples``` is 2,000,000 by default
 * ```--ratio_resample``` is the ratio of resamples to samples = 0.05
 * ```--fit_detected``` (Boolean) indicates whether to fit to confirmed cases, using assumed ratios of detected cases to true infections (set False)
 * ```---fit_hospitalised``` (Boolean) indicates whether to fit to hospitalised cases (set True for WC calibration, False for national calibration)
@@ -86,4 +88,9 @@ Age-banded table:
 | 60-69  |    0.834 |        24/129 |        28/105 |         12/24 |
 | 70-79  |    0.757 |         10/88 |         26/78 |          6/10 |
 |   80+  |    0.727 |          5/31 |         11/26 |           2/5 |
+
+
+### References
+
+(Rubin, D.B., 1987). The calculation of posterior distributions by data augmentation: Comment: A noniterative sampling/importance resampling alternative to the data augmentation algorithm for creating a few imputations when fractions of missing information are modest: The SIR algorithm. Journal of the American Statistical Association, 82(398), pp.543-546.
 
