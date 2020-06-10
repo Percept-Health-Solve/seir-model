@@ -429,7 +429,15 @@ def build_and_solve_model(t_obs,
 def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_vars=None, calc_resample_vars=None):
     logging.info('Plotting prior and posterior distributions')
 
-    fig, axes = plt.subplots(10, 10, figsize=(30, 30))
+    n = 0
+    for value in resample_vars.values():
+        n += value.shape[-1]
+    if calc_resample_vars is not None:
+        for value in calc_resample_vars.values():
+            n += value.shape[-1]
+    n = int(np.ceil(np.sqrt(n)))
+
+    fig, axes = plt.subplots(n, n, figsize=(n*3, n*3))
     axes = axes.flat
 
     ax_idx = 0
