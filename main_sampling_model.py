@@ -21,8 +21,8 @@ parser.add_argument('--output_dir', type=str, default='data/', help='Base direct
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
 parser.add_argument('--nb_runs', type=int, default=1, help='Number of runs to perform')
 parser.add_argument('--fit_detected', action='store_true', help='Fit the model to detected data')
-parser.add_argument('--fit_hospitalised', action='store_true', help='Fit the model to detected data')
-parser.add_argument('--fit_icu', action='store_true', help='Fit the model to detected data')
+parser.add_argument('--fit_hospitalised', action='store_true', help='Fit the model to hospitalised data')
+parser.add_argument('--fit_icu', action='store_true', help='Fit the model to ICU data')
 parser.add_argument('--fit_deaths', action='store_true', help='Fit the model to death data')
 parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to 'WC' or 'national' data")
 parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
@@ -31,9 +31,9 @@ parser.add_argument('--overwrite', action='store_true', help='Whether to overwri
 parser.add_argument('--from_config', type=str, help='Load model config from given json file')
 parser.add_argument('--contact_heterogeneous', action='store_true',
                     help='Use Kong et al (2016) method of employing contact heterogeneity in susceptible population')
-parser.add_argument('--contact_k', type=float, default=0.1,
+parser.add_argument('--contact_k', type=float, default=0.25,
                     help='Value of k describing contact heterogenity in Kong et al 2016.')
-parser.add_argument('--prop_as_range', type=float, default=[0.75, 0.75], nargs=2,
+parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
                     help='Lower and upper bounds for the prop_as uniform distribution')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
