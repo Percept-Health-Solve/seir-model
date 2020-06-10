@@ -34,6 +34,8 @@ class SamplingNInfectiousModel:
                  time_h_to_d=None,
                  time_c_to_r=None,
                  time_c_to_d=None,
+                 contact_heterogeneous: bool = False,
+                 contact_k: float = None,
                  y0=None,
                  imported_func=None):
         logging.info('Initizializing model')
@@ -63,13 +65,17 @@ class SamplingNInfectiousModel:
         time_c_to_r = np.asarray(time_c_to_r)
         time_c_to_d = np.asarray(time_c_to_d)
 
+        # contact heterogeneity variables
+        if contact_heterogeneous and contact_k is None:
+            raise ValueError("Setting a heterogenous contact model model requires setting the 'contact_k' variable!")
+        contact_k = np.asarray(contact_k)
+
         # calculated vars
         r0 = beta * time_infectious  # TODO: Calculate r0 as leading eigenvalue of NGM
 
         prop_s = 1 - prop_a - prop_m
         prop_s_to_c = 1 - prop_s_to_h
-        # TODO: Remove prop_h_to_r clip in favor of appropriate sampling criteria
-        prop_h_to_r = np.clip(1 - prop_h_to_c - prop_h_to_d, 0, 1)
+        prop_h_to_r = 1 - prop_h_to_c - prop_h_to_d
         prop_c_to_r = 1 - prop_c_to_d
 
         time_i_to_h = time_s_to_h - time_infectious
@@ -116,6 +122,10 @@ class SamplingNInfectiousModel:
             'time_i_to_c': time_i_to_c
         }
 
+        contact_vars = {
+            'contact_k': contact_k,
+        }
+
         # assert specific properties of variables
         for key, value in beta_vars.items():
             assert np.all(beta >= 0), f"Value in '{key}' is smaller than 0"
@@ -124,6 +134,8 @@ class SamplingNInfectiousModel:
             assert np.all(value >= 0), f"Value in proportion '{key}' is smaller than 0"
         for key, value in time_vars.items():
             assert np.all(value > 0), f"Value in time '{key}' is smaller than or equal to 0"
+        for key, value in contact_vars.items():
+            assert np.all(value > 0), f"Value in '{key} is smaller than or equal to 0."
 
         # check if calculated vars obey constraints
         # only need to check the few that aren't caught by the above checks
@@ -145,7 +157,8 @@ class SamplingNInfectiousModel:
         nb_samples, (scalar_vars, group_vars, sample_vars) = _determine_sample_vars({
             **beta_vars,
             **prop_vars,
-            **time_vars
+            **time_vars,
+            **contact_vars
         }, nb_groups)
 
         # do the same for the calculated variables
@@ -223,6 +236,10 @@ class SamplingNInfectiousModel:
         self.time_c_to_r = time_c_to_r
         self.time_c_to_d = time_c_to_d
 
+        # contact proprties
+        self.contact_heterogeneous = contact_heterogeneous
+        self.contact_k = contact_k
+
         # y0 properties
         self.y0 = y0
         self.n = n
@@ -232,6 +249,7 @@ class SamplingNInfectiousModel:
         self.prop_vars = prop_vars
         self.time_vars = time_vars
         self.calculated_vars = calculated_vars
+        self.contact_vars = contact_vars
 
         # scalar, group, and sample properties
         self.scalar_vars = scalar_vars
@@ -266,8 +284,14 @@ class SamplingNInfectiousModel:
         infectious_strength = np.sum(self.rel_beta_as * i_a + i_m + i_s, axis=1, keepdims=True)
 
         # solve seird equations
-        ds = - 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s
-        de = 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s - e / self.time_incubate
+        if not self.contact_heterogeneous:
+            ds = - 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s
+            de = 1 / self.n * self.infectious_func(t) * self.beta * infectious_strength * s - e / self.time_incubate
+        else:
+            ds = - self.contact_k * np.log1p(self.infectious_func(t) * self.beta * infectious_strength /
+                                             (self.contact_k * self.n)) * s
+            de = self.contact_k * np.log1p(self.infectious_func(t) * self.beta * infectious_strength /
+                                           (self.contact_k * self.n)) * s - e / self.time_incubate
 
         di_a = self.prop_a * e / self.time_incubate - i_a / self.time_infectious
         di_m = self.prop_m * e / self.time_incubate - i_m / self.time_infectious
@@ -368,7 +392,27 @@ class SamplingNInfectiousModel:
                                 ratio_resample: float = 0.1,
                                 y0=None,
                                 smoothing=1,
-                                group_total: bool = False):
+                                group_total: bool = False,
+                                likelihood='lognormal',
+                                fit_interval: int = 0,
+                                fit_new_deaths: bool = False):
+        if likelihood.lower() not in ['lognormal', 'poisson']:
+            raise ValueError(f"Variable 'likelihood' should be either 'lognormal' or 'poisson', "
+                             f"got {likelihood} instead.")
+        assert fit_interval == int(fit_interval), \
+            f"'fit_interval' should be a whole number, got {fit_interval} instead"
+        if fit_interval < 0:
+            raise ValueError(f"'fit_interval' must be greater than 0, got {fit_interval} instead")
+        if fit_interval == 0:
+            logging.info("Fitting to all data")
+        else:
+            logging.info(f"Fitting to data in {fit_interval} day intervals")
+            # we implicitly require t_obs to be monotonically increasing covering every day from now to the end of t_obs
+            assert np.all(np.diff(t_obs) > 0), "'t_obs' must be monotonically increasing"
+            assert np.all(np.diff(t_obs) == 1), "'t_obs' values must contain all days between its bounds"
+        if fit_new_deaths:
+            logging.info(f'Fitting to new deaths in {fit_interval} day intervals')
+
         # number of resamples
         m = int(np.round(self.nb_samples * ratio_resample))
 
@@ -379,6 +423,19 @@ class SamplingNInfectiousModel:
         h_obs = None if h_obs is None else np.asarray(h_obs).reshape(-1, 1, 1).astype(int)
         c_obs = None if c_obs is None else np.asarray(c_obs).reshape(-1, 1, 1).astype(int)
         deaths_obs = None if deaths_obs is None else np.asarray(deaths_obs).reshape(-1, 1, 1).astype(int)
+
+        if fit_interval > 0:
+            # slice variables to match the fitting period
+            old_data_len = len(t_obs)
+            slice_var = lambda x: None if x is None else x[:(len(x) - 1) // fit_interval * fit_interval + 1:fit_interval]
+            det_obs = slice_var(det_obs)
+            h_obs = slice_var(h_obs)
+            c_obs = slice_var(c_obs)
+            deaths_obs = slice_var(deaths_obs)
+            t_obs = slice_var(t_obs)
+            new_data_len = len(t_obs)
+            logging.warning(f'Had {old_data_len} data samples, now using {new_data_len} samples '
+                            f'due to fitting to data in {fit_interval} day intervals.')
 
         # assert shapes
         assert t0.ndim == 0, "t0 should be a scalar, not a vector"
@@ -409,12 +466,34 @@ class SamplingNInfectiousModel:
             c_tot = np.sum(c_tot, axis=2, keepdims=True)
             d_tot = np.sum(d_tot, axis=2, keepdims=True)
 
+        # take diff if fitting to new death cases instead of cumulative
+        if fit_new_deaths:
+            d_tot = np.diff(d_tot, axis=0)
+            deaths_obs = np.diff(deaths_obs, axis=0)
+
         # model detected cases as poisson distribution y~P(lambda=detected_cases)
         logging.info('Calculating log weights')
-        log_weights_detected = 0 if det_obs is None else _log_poisson(det_obs, detected)
-        log_weights_hospital = 0 if h_obs is None else _log_poisson(h_obs, h_tot)
-        log_weights_icu = 0 if c_obs is None else _log_poisson(c_obs, c_tot)
-        log_weights_dead = 0 if deaths_obs is None else _log_poisson(deaths_obs, d_tot)
+        if likelihood.lower() == 'poisson':
+            logging.info('Using Poisson distribution for likelihood calculation')
+            log_weights_detected = _log_poisson(det_obs, detected)
+            log_weights_hospital = _log_poisson(h_obs, h_tot)
+            log_weights_icu = _log_poisson(c_obs, c_tot)
+            log_weights_dead = _log_poisson(deaths_obs, d_tot)
+        elif likelihood.lower() == 'lognormal':
+            logging.info('Using log-normal distribution for likelihood calculation')
+            log_weights_detected, sigma_detected = _log_lognormal(det_obs, detected)
+            log_weights_hospital, sigma_hospital = _log_lognormal(h_obs, h_tot)
+            log_weights_icu, sigma_icu = _log_lognormal(c_obs, c_tot)
+            log_weights_dead, sigma_dead = _log_lognormal(deaths_obs, d_tot)
+            if sigma_detected.ndim > 0:
+                self.calculated_sample_vars['sigma_detected'] = sigma_detected
+            if sigma_hospital.ndim > 0:
+                self.calculated_sample_vars['sigma_hospital'] = sigma_hospital
+            if sigma_icu.ndim > 0:
+                self.calculated_sample_vars['sigma_icu'] = sigma_icu
+            if sigma_dead.ndim > 0:
+                self.calculated_sample_vars['sigma_dead'] = sigma_dead
+
 
         # Free up memory at this point
         del s, e, i_a, i_m, i_s, i_h, i_c, h_r, h_c, h_d, c_r, c_d, r_a, r_m, r_h, r_c, d_h, d_c
@@ -550,6 +629,16 @@ def _determine_sample_vars(vars: dict, nb_groups):
 
 
 def _log_poisson(k, l):
+    if k is None:
+        return np.array(0)
     out = k * np.log(l+1E-20) - l - gammaln(k+1)
     out = np.sum(out, axis=(0, 2))
     return out
+
+
+def _log_lognormal(observed, recorded):
+    if observed is None:
+        return (np.array(0), np.array(0))
+    sigma = np.sqrt(np.mean((np.log(recorded) - np.log(observed))**2, axis=(0, 2), keepdims=True))
+    log_weights = -1/2 * np.log(2 * np.pi * sigma**2) - (np.log(recorded) - np.log(observed))**2 / (2 * sigma**2)
+    return np.sum(log_weights, axis=(0, 2)), sigma.reshape(-1, 1)
