@@ -31,23 +31,36 @@ parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to
 parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
 parser.add_argument('--from_config', type=str, help='Load model config from given json file')
+parser.add_argument('--only_process_runs', action='store_true')
+parser.add_argument('--only_plot', action='store_true')
 
 parser.add_argument('--t0', type=int, default=-50, help='Day relative to the start of lockdown to seed the model.')
-parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
-                    help='Lower and upper bounds for the prop_as uniform distribution')
+parser.add_argument('--e0_range', type=float, default=[0, 1e-5],
+                    help='Lower and upper bounds to for the uniform prior distribution of e0.')
+
+parser.add_argument('--r0_range', type=float, default=[1.5, 3.5],
+                    help='Lower and upper bounds to for the uniform prior distribution of R0.')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
-parser.add_argument('--likelihood', type=str, default='lognormal',
-                    help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
+
+parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
+                    help='Lower and upper bounds to for the uniform prior distribution of prop_a.')
+parser.add_argument('--prop_s_to_h_range', type=float, default=[0.8875, 0.8875],
+                    help='Lower and upper bounds to for the uniform prior distribution of prop_s_to_h.')
+
+parser.add_argument('--time_infectious_range', type=float, default=[1.5, 2.6],
+                    help='Lower and upper bounds to for the uniform prior distribution of time_infectious.')
+
 parser.add_argument('--fit_interval', type=int, default=0,
                     help='Number of days between which to consider fitting. Zero indicates fitting to all data.')
 parser.add_argument('--fit_new_deaths', action='store_true', help='Fit to new deaths instead of cumulative deaths')
-parser.add_argument('--only_process_runs', action='store_true')
-parser.add_argument('--only_plot', action='store_true')
 parser.add_argument('--contact_heterogeneous', action='store_true',
                     help='Use Kong et al (2016) method of employing contact heterogeneity in susceptible population')
 parser.add_argument('--contact_k', type=float, default=0.25,
                     help='Value of k describing contact heterogenity in Kong et al 2016.')
+
+parser.add_argument('--likelihood', type=str, default='lognormal',
+                    help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
 
 
 def main():
@@ -262,24 +275,24 @@ def build_and_solve_model(t_obs,
 
     if not load_prior_file:
         logging.info('Setting priors')
-        time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
+        time_infectious = _uniform_from_range(args.time_infectious_range, size=(nb_samples, 1))
         prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
-        prop_s_to_h = 0.8875  # np.random.uniform(0, 1, size=(nb_samples, nb_groups))
+        prop_s_to_h = _uniform_from_range(args.prop_s_to_h_range, size=(nb_samples, 1))
 
-        r0 = np.random.uniform(1.5, 3.5, size=(nb_samples, 1))
+        r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
         rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
-        e0 = None
+        e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
 
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
             mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
-            prop_h_to_c = mort_loading * 119/825
-            prop_h_to_d = mort_loading * 270/1704
-            prop_c_to_d = mort_loading * 54/119
+            prop_h_to_c = mort_loading * 119 / 825
+            prop_h_to_d = mort_loading * 270 / 1704
+            prop_c_to_d = mort_loading * 54 / 119
         else:
             logging.info('Using 9 age groups, corresponding to 10 year age bands.')
             # from ferguson
@@ -288,17 +301,10 @@ def build_and_solve_model(t_obs,
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
             mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
-            prop_h_to_c = mort_loading * np.array([[1/81, 1/81, 1/81, 7/184, 32/200, 38/193, 24/129, 10/88, 5/31]])
-            prop_h_to_d = mort_loading * np.array([[0, 0, 0, 7/177, 8/168, 23/155, 28/105, 26/78, 11/26]])
-            prop_c_to_d = mort_loading * np.array([[0.1, 0.1, 0.1, 2/7, 14/32, 18/38, 12/24, 6/10, 2/5]])
-            # prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
-            # prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
-            # prop_c_to_d = np.random.beta([0.1, 0.1, 0.1, 2, 14, 18, 12, 6, 2], [1.1, 1.1, 1.1, 5, 18, 20, 12, 4, 3], size=(nb_samples, nb_groups))
-            # time_h_to_c = 10
-            # time_h_to_r = [[4, 12, 14.8, 8.1, 8.3, 12, 9.1, 15.2, 10.8]]
-            # time_h_to_d = [[9.9, 9.9, 9.9, 7.6, 10.1, 13, 10, 11.2, 13.5]]
-            # time_c_to_r = [[6, 2, 18.3, 18.3, 20.9, 15, 15.6, 13.9, 15]]
-            # time_c_to_d = [[18.8, 18.8, 18.8, 18.8, 22.9, 14.1, 15.3, 22, 13.9]]
+            prop_h_to_c = mort_loading * np.array(
+                [[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
+            prop_h_to_d = mort_loading * np.array([[0, 0, 0, 7 / 177, 8 / 168, 23 / 155, 28 / 105, 26 / 78, 11 / 26]])
+            prop_c_to_d = mort_loading * np.array([[0.1, 0.1, 0.1, 2 / 7, 14 / 32, 18 / 38, 12 / 24, 6 / 10, 2 / 5]])
     else:
         # load df
         logging.info(f"Loading proportion priors from {load_prior_file}")
@@ -344,11 +350,11 @@ def build_and_solve_model(t_obs,
         if args.age_groups:
             prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])
         else:
-            prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
+            prop_m = (1 - prop_a) * 0.957  # ferguson
         if 'prop_s_to_h' in df_priors:
             prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
         else:
-            prop_s_to_h = 0.8875
+            prop_s_to_h = _uniform_from_range(args.prop_s_to_h, size=(nb_samples, 1))
         beta = np.random.normal(get_mean('beta'), scale=random_scale).clip(min=0)
         rel_lockdown_beta = np.random.normal(get_mean('rel_lockdown_beta'), scale=random_scale).clip(min=0, max=1)
         rel_beta_as = np.random.normal(get_mean('rel_beta_as'), scale=random_scale).clip(min=0, max=1)
@@ -456,7 +462,7 @@ def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_var
             n += value.shape[-1]
     n = int(np.ceil(np.sqrt(n)))
 
-    fig, axes = plt.subplots(n, n, figsize=(n*3, n*3))
+    fig, axes = plt.subplots(n, n, figsize=(n * 3, n * 3))
     axes = axes.flat
 
     ax_idx = 0
