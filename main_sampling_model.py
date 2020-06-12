@@ -861,9 +861,10 @@ def calculate_resample(t_obs,
 
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 
-    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot]
-    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs]
-    titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths']
+    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, ifr, cfr, hfr, atr]
+    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, None, None, None, None]
+    titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths',
+              'Infection Fatality Ratio', 'Case Fatality Ratio', 'Hospital Fatality Ratio', 'Attack Rate']
 
     logging.info('Generating timeseries summary stats and plotting')
     summary_stats = {}
@@ -881,9 +882,9 @@ def calculate_resample(t_obs,
             if j == 0:
                 if obs_vars[i] is not None:
                     axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
-                    axes[j, i].set_ylim((-1, np.max(obs_vars[i]) * 1.05))
+                    axes[j, i].set_ylim((0, np.max(obs_vars[i]) * 1.05))
                 else:
-                    axes[j, i].set_ylim((-1, np.max(mu[110]) * 1.05))
+                    axes[j, i].set_ylim((0, np.max(mu[130]) * 1.5))
                 axes[j, i].set_xlim(
                     (pd.to_datetime('2020/03/27'), np.max(t_date) + datetime.timedelta(days=1))
                 )
