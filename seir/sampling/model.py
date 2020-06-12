@@ -253,6 +253,7 @@ class SamplingNInfectiousModel:
 
         # scalar, group, and sample properties
         self.scalar_vars = scalar_vars
+        self.scalar_vars['contact_heterogeneous'] = contact_heterogeneous
         self.group_vars = group_vars
         self.sample_vars = sample_vars
 
@@ -500,6 +501,10 @@ class SamplingNInfectiousModel:
 
         log_weights = log_weights_detected + log_weights_hospital + log_weights_icu + log_weights_dead
         weights = softmax(log_weights/smoothing)
+        if weights.ndim == 0:
+            logging.warning('Weights seem mis-shaped, likely due to zero log-weighting. This occurs if you did not '
+                            'fit to any data. Setting weights to correct shape of equal distribution.')
+            weights = 1 / self.nb_samples * np.ones((self.nb_samples,))
 
         logging.info(f'log_weights_min: {log_weights.min()}')
         logging.info(f'log_weights_max: {log_weights.max()}')
