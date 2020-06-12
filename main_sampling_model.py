@@ -271,9 +271,10 @@ def build_and_solve_model(t_obs,
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
-            prop_h_to_c = np.random.beta(119, 825, size=(nb_samples, nb_groups))
-            prop_h_to_d = np.random.beta(270, 1434, size=(nb_samples, nb_groups))
-            prop_c_to_d = np.random.beta(54, 65, size=(nb_samples, nb_groups))
+            mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
+            prop_h_to_c = mort_loading * 119/825
+            prop_h_to_d = mort_loading * 270/1704
+            prop_c_to_d = mort_loading * 54/119
         else:
             logging.info('Using 9 age groups, corresponding to 10 year age bands.')
             # from ferguson
@@ -281,9 +282,10 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
-            prop_h_to_c = np.array([[1/81, 1/81, 1/81, 7/184, 32/200, 38/193, 24/129, 10/88, 5/31]])
-            prop_h_to_d = np.array([[0, 0, 0, 7/177, 8/168, 23/155, 28/105, 26/78, 11/26]])
-            prop_c_to_d = np.array([[0.1, 0.1, 0.1, 2/7, 14/32, 18/38, 12/24, 6/10, 2/5]])
+            mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
+            prop_h_to_c = mort_loading * np.array([[1/81, 1/81, 1/81, 7/184, 32/200, 38/193, 24/129, 10/88, 5/31]])
+            prop_h_to_d = mort_loading * np.array([[0, 0, 0, 7/177, 8/168, 23/155, 28/105, 26/78, 11/26]])
+            prop_c_to_d = mort_loading * np.array([[0.1, 0.1, 0.1, 2/7, 14/32, 18/38, 12/24, 6/10, 2/5]])
             # prop_h_to_c = np.random.beta([1.2, 1.2, 1.2, 7, 32, 38, 24, 10, 5], [80.2, 80.2, 80.2, 177, 168, 155, 105, 78, 26], size=(nb_samples, nb_groups))
             # prop_h_to_d = np.random.beta([0.1, 0.1, 0.1, 7, 8, 23, 28, 26, 11], [80.1, 80.1, 80.1, 170, 160, 132, 77, 52, 15], size=(nb_samples, nb_groups))
             # prop_c_to_d = np.random.beta([0.1, 0.1, 0.1, 2, 14, 18, 12, 6, 2], [1.1, 1.1, 1.1, 5, 18, 20, 12, 4, 3], size=(nb_samples, nb_groups))
