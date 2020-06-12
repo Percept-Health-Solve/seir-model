@@ -858,10 +858,14 @@ def calculate_resample(t_obs,
     h_tot = np.sum(h_r + h_d + h_c, axis=2)
     c_tot = np.sum(c_r + c_d, axis=2)
     d_tot = np.sum(d_c + d_h, axis=2)
+    ifr = d_tot / np.sum(y[:, :, :, 2:], axis=(2, 3))
+    cfr = d_tot / cum_detected_samples
+    hfr = d_tot / np.sum(h_r + h_d + h_c + c_r + c_d + r_h + r_c + d_h + d_c, axis=2)
+    atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / model.n.reshape(-1)
 
     logging.info('Plotting solutions')
 
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    fig, axes = plt.subplots(2, 8, figsize=(32, 8))
 
     pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, ifr, cfr, hfr, atr]
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, None, None, None, None]
