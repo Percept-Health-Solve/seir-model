@@ -40,16 +40,23 @@ parser.add_argument('--e0_range', type=float, default=[0, 1e-5],
 
 parser.add_argument('--r0_range', type=float, default=[1.5, 3.5],
                     help='Lower and upper bounds to for the uniform prior distribution of R0.')
+parser.add_argument('--rel_bea_as_range', type=float, default=[0.3, 1],
+                    help='Lower and upper bounds to for the uniform prior distribution of the relative infectevity '
+                         'level of asymptomatic cases.')
+parser.add_argument('--rel_lockdown5_beta_range', type=float, default=[0.4, 1],
+                    help='Lower and upper bounds to for the uniform prior distribution of the relative beta '
+                         'experience during level 5 lockdown.')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
-                    help='The relative infectivity post lockdown.')
+                    help='The relative infectivity post all levels of lockdown.')
 
 parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
-                    help='Lower and upper bounds to for the uniform prior distribution of prop_a.')
+                    help='Lower and upper bounds to for the uniform prior distribution of the proportion asymptomatic.')
 parser.add_argument('--prop_s_to_h_range', type=float, default=[0.8875, 0.8875],
-                    help='Lower and upper bounds to for the uniform prior distribution of prop_s_to_h.')
+                    help='Lower and upper bounds to for the uniform prior distribution of proportion severe moving '
+                         'to hospital.')
 
 parser.add_argument('--time_infectious_range', type=float, default=[1.5, 2.6],
-                    help='Lower and upper bounds to for the uniform prior distribution of time_infectious.')
+                    help='Lower and upper bounds to for the uniform prior distribution of time of infectiousens.')
 
 parser.add_argument('--fit_interval', type=int, default=0,
                     help='Number of days between which to consider fitting. Zero indicates fitting to all data.')
@@ -281,7 +288,7 @@ def build_and_solve_model(t_obs,
 
         r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
-        rel_lockdown5_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
+        rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
