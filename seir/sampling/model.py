@@ -16,9 +16,16 @@ class SamplingNInfectiousModel:
     def __init__(self,
                  nb_groups: int,
                  beta=None,
-                 rel_lockdown_beta=None,
-                 rel_postlockdown_beta=None,
+                 rel_lockdown5_beta=0.75,
+                 rel_lockdown4_beta=0.8,
+                 rel_lockdown3_beta=0.8,
+                 rel_lockdown2_beta=0.8,
+                 rel_postlockdown_beta=0.8,
                  rel_beta_as=None,
+                 period_lockdown5=35,
+                 period_lockdown4=28,
+                 period_lockdown3=28,
+                 period_lockdown2=28,
                  prop_a=None,
                  prop_m=None,
                  prop_s_to_h=None,
@@ -42,7 +49,7 @@ class SamplingNInfectiousModel:
 
         # infectious and relative to infectious rates
         beta = np.asarray(beta)
-        rel_lockdown_beta = np.asarray(rel_lockdown_beta)
+        rel_lockdown5_beta = np.asarray(rel_lockdown5_beta)
         rel_postlockdown_beta = np.asarray(rel_postlockdown_beta)
         rel_beta_as = np.asarray(rel_beta_as)
 
@@ -86,7 +93,7 @@ class SamplingNInfectiousModel:
 
         beta_vars = {
             'beta': beta,
-            'rel_lockdown_beta': rel_lockdown_beta,
+            'rel_lockdown5_beta': rel_lockdown5_beta,
             'rel_postlockdown_beta': rel_postlockdown_beta,
             'rel_beta_as': rel_beta_as
         }
@@ -187,9 +194,20 @@ class SamplingNInfectiousModel:
             if t < -11:
                 return 1
             elif -11 <= t < 0:
-                return 1 - (1 - rel_lockdown_beta) / 11 * (t - 11)
-            elif 0 <= t < 5 * 7:
-                return rel_lockdown_beta
+                # pre lockdown smoothing
+                return 1 - (1 - rel_lockdown5_beta) / 11 * (t - 11)
+            elif 0 <= t < period_lockdown5:
+                # lockdown level 5
+                return rel_lockdown5_beta
+            elif period_lockdown5 <= t < period_lockdown4:
+                # lockdown level 4
+                return rel_lockdown4_beta
+            elif period_lockdown4 <= t < period_lockdown3:
+                # lockdown level 3
+                return rel_lockdown3_beta
+            elif period_lockdown3 <= t < period_lockdown2:
+                # lockdown level 2
+                return rel_lockdown2_beta
             # else
             return rel_postlockdown_beta
 
@@ -208,7 +226,7 @@ class SamplingNInfectiousModel:
         # beta proporties
         self.beta = beta
         self.rel_beta_as = rel_beta_as
-        self.rel_lockdown_beta = rel_lockdown_beta
+        self.rel_lockdown_beta = rel_lockdown5_beta
         self.rel_postlockdown_beta = rel_postlockdown_beta
 
         # proportion proporties

@@ -66,7 +66,7 @@ if __name__ == '__main__':
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
         beta=r0 / time_infectious,
-        rel_lockdown_beta=np.random.uniform(0.55, 0.65, size=(nb_samples, 1)),
+        rel_lockdown5_beta=np.random.uniform(0.55, 0.65, size=(nb_samples, 1)),
         rel_postlockdown_beta=np.random.uniform(0.7, 0.8, size=(nb_samples, 1)),
         rel_beta_as=0.5,
         time_incubate=5.1,

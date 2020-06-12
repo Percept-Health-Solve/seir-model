@@ -281,7 +281,7 @@ def build_and_solve_model(t_obs,
 
         r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
-        rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
+        rel_lockdown5_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
@@ -356,7 +356,7 @@ def build_and_solve_model(t_obs,
         else:
             prop_s_to_h = _uniform_from_range(args.prop_s_to_h, size=(nb_samples, 1))
         beta = np.random.normal(get_mean('beta'), scale=random_scale).clip(min=0)
-        rel_lockdown_beta = np.random.normal(get_mean('rel_lockdown_beta'), scale=random_scale).clip(min=0, max=1)
+        rel_lockdown5_beta = np.random.normal(get_mean('rel_lockdown5_beta'), scale=random_scale).clip(min=0, max=1)
         rel_beta_as = np.random.normal(get_mean('rel_beta_as'), scale=random_scale).clip(min=0, max=1)
         prop_h_to_c = np.random.normal(get_mean('prop_h_to_c'), scale=random_scale).clip(min=0, max=1)
         prop_h_to_d = np.random.normal(get_mean('prop_h_to_d'), scale=random_scale).clip(min=0, max=1)
@@ -369,7 +369,7 @@ def build_and_solve_model(t_obs,
     model = SamplingNInfectiousModel(
         nb_groups=9 if args.age_groups else 1,
         beta=beta,
-        rel_lockdown_beta=rel_lockdown_beta,
+        rel_lockdown5_beta=rel_lockdown5_beta,
         rel_postlockdown_beta=rel_postlockdown_beta,
         rel_beta_as=rel_beta_as,
         prop_a=prop_a,
