@@ -20,29 +20,34 @@ parser.add_argument('--ratio_resample', type=float, default=0.05, help='Proporti
 parser.add_argument('--output_dir', type=str, default='data/', help='Base directory in which to save files')
 parser.add_argument('--model_name', type=str, default='model', help='Model name')
 parser.add_argument('--nb_runs', type=int, default=1, help='Number of runs to perform')
+parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
+
 parser.add_argument('--fit_detected', action='store_true', help='Fit the model to detected data')
 parser.add_argument('--fit_hospitalised', action='store_true', help='Fit the model to hospitalised data')
 parser.add_argument('--fit_icu', action='store_true', help='Fit the model to ICU data')
 parser.add_argument('--fit_deaths', action='store_true', help='Fit the model to death data')
 parser.add_argument('--fit_data', type=str, default='WC', help="Fit the model to 'WC' or 'national' data")
-parser.add_argument('--age_groups', action='store_true', help='Split the population into age bands when fitting')
+
 parser.add_argument('--load_prior_file', type=str, help='Load prior distributions from this file')
 parser.add_argument('--overwrite', action='store_true', help='Whether to overwrite any previous model saves')
 parser.add_argument('--from_config', type=str, help='Load model config from given json file')
-parser.add_argument('--contact_heterogeneous', action='store_true',
-                    help='Use Kong et al (2016) method of employing contact heterogeneity in susceptible population')
-parser.add_argument('--contact_k', type=float, default=0.25,
-                    help='Value of k describing contact heterogenity in Kong et al 2016.')
+
+parser.add_argument('--t0', type=int, default=-50, help='Day relative to the start of lockdown to seed the model.')
 parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
                     help='Lower and upper bounds for the prop_as uniform distribution')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post lockdown.')
-parser.add_argument('--only_process_runs', action='store_true')
 parser.add_argument('--likelihood', type=str, default='lognormal',
                     help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
 parser.add_argument('--fit_interval', type=int, default=0,
                     help='Number of days between which to consider fitting. Zero indicates fitting to all data.')
 parser.add_argument('--fit_new_deaths', action='store_true', help='Fit to new deaths instead of cumulative deaths')
+parser.add_argument('--only_process_runs', action='store_true')
+parser.add_argument('--only_plot', action='store_true')
+parser.add_argument('--contact_heterogeneous', action='store_true',
+                    help='Use Kong et al (2016) method of employing contact heterogeneity in susceptible population')
+parser.add_argument('--contact_k', type=float, default=0.25,
+                    help='Value of k describing contact heterogenity in Kong et al 2016.')
 
 
 def main():
