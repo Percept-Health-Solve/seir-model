@@ -329,30 +329,31 @@ def build_and_solve_model(t_obs,
         nb_samples = nb_repeats * nb_prior_samples
 
         # set random vars
-        random_scale = 0.01
+        random_scale = 0.0001
         time_infectious = np.random.normal(get_mean('time_infectious'), scale=random_scale)
         # TODO: Change these if else statements, rather use a default value in the function instead?
         if 'prop_a' in df_priors:
             prop_a = np.random.normal(get_mean('prop_a'), scale=random_scale).clip(min=0, max=1)
         else:
             prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
-        prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
+        if args.age_groups:
+            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])
+        else:
+            prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic not requiring hospitalisation
         if 'prop_s_to_h' in df_priors:
             prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
         else:
             prop_s_to_h = 0.8875
+        beta = np.random.normal(get_mean('beta'), scale=random_scale).clip(min=0)
+        rel_lockdown_beta = np.random.normal(get_mean('rel_lockdown_beta'), scale=random_scale).clip(min=0, max=1)
+        rel_beta_as = np.random.normal(get_mean('rel_beta_as'), scale=random_scale).clip(min=0, max=1)
         prop_h_to_c = np.random.normal(get_mean('prop_h_to_c'), scale=random_scale).clip(min=0, max=1)
         prop_h_to_d = np.random.normal(get_mean('prop_h_to_d'), scale=random_scale).clip(min=0, max=1)
         prop_c_to_d = np.random.normal(get_mean('prop_c_to_d'), scale=random_scale).clip(min=0, max=1)
-        # e0 = np.random.normal(get_mean('e0'), scale=random_scale) / 7000000
+        e0 = get_mean('e0')
 
-    r0 = np.random.uniform(1.5, 3.5, size=(nb_samples, 1))
-    beta = r0 / time_infectious
-    rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
-    rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
-
-    y0, e0 = create_y0(args, nb_samples, nb_groups)
-    t0 = -50
+    y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
+    t0 = args.t0
 
     model = SamplingNInfectiousModel(
         nb_groups=9 if args.age_groups else 1,
@@ -488,7 +489,7 @@ def plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_var
 
 def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
     if e0 is None:
-        e0 = np.random.uniform(0, 1e-6, size=(nb_samples, 1))
+        e0 = np.random.uniform(0, 1e-5, size=(nb_samples, 1))
     y0 = np.zeros((nb_samples, nb_groups, SamplingNInfectiousModel.nb_states))
     if not args.age_groups:
         # single population group, so we set starting population accordingly
@@ -744,7 +745,7 @@ def calculate_resample(t_obs,
     logging.info(f"Groups: {nb_groups}")
 
     t0 = scalar_vars.pop('t0')
-    e0 = resample_vars.pop('e0')
+    e0 = resample_vars.pop('e0', None)
 
     y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
 
