@@ -106,7 +106,7 @@ def main():
                         f"{'and ' if args.fit_detected or args.fit_hospitalised or args.fit_icu else ''}"
                         f"{'death' if args.fit_deaths else ''} cases")
     else:
-        raise ValueError(f'Not fitting to any data! Use --fit_detected, --fit_icu, --fit_hospitalised, or --fit_deaths')
+        logging.warning(f'Not fitting to any data! Use --fit_detected, --fit_icu, --fit_hospitalised, or --fit_deaths')
 
     # load data
     if args.fit_data.lower() == 'wc':
@@ -125,6 +125,7 @@ def main():
             cmds.pop('overwrite', None)
             cmds.pop('from_json', None)
             cmds.pop('only_process_runs', None)
+            cmds.pop('only_plot')
             json.dump(cmds, f, indent=4)
 
     detected_fit = i_d_obs if args.fit_detected else None
@@ -142,13 +143,17 @@ def main():
                                                                     load_prior_file=load_prior_file,
                                                                     model_base=save_dir)
 
+    # set seaborn plotting style
+    sns.set(style='darkgrid')
+
     model_base = output_dir.joinpath(f'{args.model_name}')
     if args.nb_runs > 1:
         if not args.only_process_runs:
             for run in range(args.nb_runs):
                 model_run_base = output_dir.joinpath(f'{run:02}_{args.model_name}')
                 logging.info(f'Executing run {run + 1}')
-                _build_and_solve_model(model_run_base)
+                if not args.only_plot:
+                    _build_and_solve_model(model_run_base)
                 calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_run_base)
         # process runs to single output
         logging.info(f'Processing results from {args.nb_runs} runs')
@@ -156,8 +161,8 @@ def main():
         process_multi_run(args.nb_runs, nb_process_resamples, output_dir, args.model_name)
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
     else:
-
-        _build_and_solve_model(model_base)
+        if not args.only_plot:
+            _build_and_solve_model(model_base)
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
 
@@ -255,6 +260,13 @@ def build_and_solve_model(t_obs,
         time_infectious = np.random.uniform(1.5, 2.6, size=(nb_samples, 1))
         prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         prop_s_to_h = 0.8875  # np.random.uniform(0, 1, size=(nb_samples, nb_groups))
+
+        r0 = np.random.uniform(1.5, 3.5, size=(nb_samples, 1))
+        beta = r0 / time_infectious
+        rel_lockdown_beta = np.random.uniform(0.4, 1, size=(nb_samples, 1))
+        rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
+
+        e0 = None
 
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
