@@ -423,7 +423,6 @@ def build_and_solve_model(t_obs,
             df_resample[f'{key}_{i}'] = value[:, i]
 
     # plot variables of interest
-    sns.set(style='darkgrid')
     plot_prior_posterior(model_base, sample_vars, resample_vars, calc_sample_vars, calc_resample_vars)
 
     if len(df_resample.columns) <= 20:
