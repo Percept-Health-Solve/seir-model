@@ -1,6 +1,6 @@
 # Parameter values for calibrations
 
-Last updated: 10 June 2020. Parameter values/distributions shown only for age-banded model.
+Last updated: 13 June 2020. Parameter values/distributions shown only for age-banded model.
 
 Calibration is done through the use of sampling-importance-resampling (Rubin 1987).
 
@@ -16,7 +16,7 @@ There are four different types of parameter in the model:
 
 4. Variable parameters, whose prior distributions are set: sampled values are then drawn (independently) from these distributions in order to test the fit of parameter combinations within a very wide parameter space.
 
-
+Parameters beginning with `--` are parser arguments in the script, i.e. can be set in the command line call.
 
 ### Controlling parameters
 
@@ -45,18 +45,22 @@ There are four different types of parameter in the model:
 * `time_h_to_d`: LOS in hospital before death, for those who die without going to ICU = 9.9
 * `time_c_to_r`: LOS in ICU before recovery, for those who recover = 18.3
 * `time_c_to_d`: LOS in ICU before death, for those who die = 18.8
-* `t0`: seeding date for infections, relative to start of lockdown = -50
+* `t0` (from `--t0`): seeding date for infections, relative to start of lockdown = -50
 * `ratio_as_detected`, `ratio_m_detected`, `ratio_s_detected`: proportion of asymptomatic, mild and severe cases assumed to be detected and hence reported in confirmed cases = (0,0.3,1)
-* `prop_s_to_h`: proportion of severe cases who will go to hospital general ward (the remainder go straight to ICU) = 0.8875
-
+* `prop_s_to_h` (can be set as a calibration parameter with upper and lower bounds for a uniform distribution in `--prop_s_to_h_range`): proportion of severe cases who will go to hospital general ward (the remainder go straight to ICU) = 0.8875
+* `period_lockdown5` = 35 (Level 5 lockdown 27 March to 30 April)
+* `period_lockdown4` = 31 (May)
+* `period_lockdown3` = 30 (June)
+* `period_lockdown2` = 31 (July)
 
 ### Scenario parameters
 
 *Notes: finalise scenarios; model structure changes to be considered for post-lockdown period with variable relative betas*
 
-* ```contact_k``` is the value of `k` in the Kong et al. method, 0.25 by default; scenario values to be determined
-* `rel_postlockdown_beta`: infectious spread post Level 5 relative to baseline, 0.8 by default; scenario values to be determined
-* ```prop_as_range``` is the range of values which can be taken by the assumed proportion asymptomatic; at present we are making this deterministic per scenario with a base assumption of 0.5 (achieved by setting the upper and lower bounds to 0.5), pending data from the WCDoH, with other scenario values to be determined
+* ```--contact_k``` is the value of `k` in the Kong et al. method, 0.25 by default; scenario values to be determined
+* `rel_lockdown4_beta`: infectious spread post Level 5 relative to baseline, 0.8 by default; scenario values to be determined
+* `rel_lockdown3_beta`, `rel_lockdown3_beta`, `rel_lockdown2_beta`, `rel_postlockdown_beta` = 0.8 by default; scenarios to be determined
+* ```prop_as_range``` is the range of values which can be taken by the assumed proportion asymptomatic; at present we are making this deterministic per scenario with a base assumption of 0.5 (achieved by setting the upper and lower bounds to 0.5), pending data from the WCDoH, with other scenario values to be determined.
 
 
 
@@ -64,15 +68,15 @@ There are four different types of parameter in the model:
 
 *Notes: check source of time infectious assumption; confirm sources of prop parameters; consider whether range of R0 distribution should be shifted upward; review prop parameters as use of empirical WC experience leads to counter-intuitive shapes by age in some parts of the curves*
 
-* `time_infectious`: days for which an infected individual is infectious to others before being isolated $\sim U(1.5,2.6)$
+* `time_infectious` (upper and lower bounds from `--time_infectious_range`: days for which an infected individual is infectious to others before being isolated $\sim U(1.5,2.6)$
 * `prop_m`: proportion of infections that are mild = age-banded proportions of non-asymptomatic infections in table below, taken from Fergus et al. (2020)
 * `prop_h_to_c`: proportion of initial hospital (general ward) admissions in table below, from observed Western Cape data
 * `prop_h_to_d`: proportion of hospital (general ward) admissions that will die in table below, from observed Western Cape data
 * `prop_c_to_d`: proportion of ICU admissions that will die in table below, from observed Western Cape data
-* `r0`: baseline reproductive number with fully susceptible population $\sim U(1.5,3.5)$
-* `rel_lockdown_beta`: rate of inectious spread in Level 5 lockdown compared to baseline $\sim U(0.4,1)$
-* `rel_beta_as`: relative infectiousness of asymptomatic cases $\sim U(0.3,1)$
-* `e0`: proportion of initial population at `t0` that is exposed $\sim U(0,10^{-6})$
+* `r0` (from `--r0_range`): baseline reproductive number with fully susceptible population $\sim U(1.5,3.5)$
+* `rel_lockdown5_beta` (upper and lower bounds from `--rel_lockdown5_beta_range`): rate of infectious spread in Level 5 lockdown compared to baseline $\sim U(0.4,1)$
+* `rel_beta_as` (upper and lower bounds from `--rel_beta_as_range`): relative infectiousness of asymptomatic cases $\sim U(0.3,1)$
+* `e0` (upper and lower bounds from `--e0_range`): proportion of initial population at `t0` that is exposed $\sim U(0,10^{-5})$
 
 
 Age-banded table:
