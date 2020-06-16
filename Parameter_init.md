@@ -59,7 +59,7 @@ Parameters beginning with `--` are parser arguments in the script, i.e. can be s
 
 * ```--contact_k``` is the value of `k` in the Kong et al. method, 0.25 by default; scenario values to be determined
 * `rel_lockdown4_beta`: infectious spread post Level 5 relative to baseline, 0.8 by default; scenario values to be determined
-* `rel_lockdown3_beta`, `rel_lockdown3_beta`, `rel_lockdown2_beta`, `rel_postlockdown_beta` = 0.8 by default; scenarios to be determined
+* `rel_lockdown3_beta`, `rel_lockdown3_beta`, `rel_lockdown2_beta`, `rel_postlockdown_beta` = (0.6, 0.6, 0.7, 0.8) by default; scenarios to be determined
 * ```prop_as_range``` is the range of values which can be taken by the assumed proportion asymptomatic; at present we are making this deterministic per scenario with a base assumption of 0.5 (achieved by setting the upper and lower bounds to 0.5), pending data from the WCDoH, with other scenario values to be determined.
 * `prop_m`: proportion of infections that are mild = age-banded proportions of non-asymptomatic infections in table below, taken from Ferguson et al. (2020)
 * `prop_h_to_c`: proportion of initial hospital (general ward) admissions in table below, from observed Western Cape data - not updated 14 June due to time constraints but needs review
