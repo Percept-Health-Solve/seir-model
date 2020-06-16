@@ -40,11 +40,11 @@ parser.add_argument('--e0_range', type=float, default=[0, 1e-5],
 
 parser.add_argument('--r0_range', type=float, default=[1.5, 3.5],
                     help='Lower and upper bounds to for the uniform prior distribution of R0.')
-parser.add_argument('--rel_bea_as_range', type=float, default=[0.3, 1],
-                    help='Lower and upper bounds to for the uniform prior distribution of the relative infectevity '
+parser.add_argument('--rel_beta_as_range', type=float, default=[0.3, 1],
+                    help='Lower and upper bounds to for the uniform prior distribution of the relative infectivity '
                          'level of asymptomatic cases.')
 parser.add_argument('--rel_lockdown5_beta_range', type=float, default=[0.4, 1],
-                    help='Lower and upper bounds to for the uniform prior distribution of the relative beta '
+                    help='Lower and upper bounds for the uniform prior distribution of the relative beta '
                          'experience during level 5 lockdown.')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
                     help='The relative infectivity post all levels of lockdown.')
@@ -117,7 +117,8 @@ def main():
     # set up logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -- %(message)s',
                         datefmt='%H:%M:%S',
-                        level=logging.INFO)
+                        level=logging.INFO,
+                        filename=f'data/{args.model_name}.log')
 
     # log training runs and samples
     logging.warning(f"Training model for {args.nb_runs} run(s) with {args.nb_samples} samples "
@@ -274,11 +275,11 @@ def build_and_solve_model(t_obs,
     contact_k = args.contact_k
 
     # inform survival times from KM lifetime analysis of WC data
-    time_h_to_c = 10
-    time_h_to_r = 10.1
-    time_h_to_d = 9.9
-    time_c_to_r = 18.3
-    time_c_to_d = 18.8
+    time_h_to_c = 2.6
+    time_h_to_r = 8
+    time_h_to_d = 8
+    time_c_to_r = 16
+    time_c_to_d = 13
 
     if not load_prior_file:
         logging.info('Setting priors')
@@ -296,8 +297,8 @@ def build_and_solve_model(t_obs,
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
-            mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
-            prop_h_to_c = mort_loading * 119 / 825
+            mort_loading = np.random.uniform(0.65, 1.1, size=(nb_samples, 1))
+            prop_h_to_c = 119 / 825
             prop_h_to_d = mort_loading * 270 / 1704
             prop_c_to_d = mort_loading * 54 / 119
         else:
@@ -307,11 +308,10 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
-            mort_loading = np.random.uniform(0.8, 1.2, size=(nb_samples, 1))
-            prop_h_to_c = mort_loading * np.array(
-                [[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
-            prop_h_to_d = mort_loading * np.array([[0, 0, 0, 7 / 177, 8 / 168, 23 / 155, 28 / 105, 26 / 78, 11 / 26]])
-            prop_c_to_d = mort_loading * np.array([[0.1, 0.1, 0.1, 2 / 7, 14 / 32, 18 / 38, 12 / 24, 6 / 10, 2 / 5]])
+            mort_loading = np.random.uniform(0.65, 1.1, size=(nb_samples, 1))
+            prop_h_to_c = np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
+            prop_h_to_d = mort_loading * np.array([[0.011,0.042,0.045,0.063,0.096,0.245,0.408,0.448,0.526]])
+            prop_c_to_d = mort_loading * np.array([[0.011,0.042,0.410,0.540,0.590,0.650,0.660,0.670,.710]])
     else:
         # load df
         logging.info(f"Loading proportion priors from {load_prior_file}")
@@ -544,6 +544,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
             filter = 'Western Cape'
         elif args.fit_data.lower() == 'national':
             filter = 'Grand Total'
+        if args.fit_data.lower() == 'wc':
+            df_pop['Western Cape'] = df_pop['Western Cape'] * 7000000 / df_pop['Western Cape'].sum()   # adjust to Andrew's 7m for now
         for i in range(nb_groups):
             y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0]
             y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0]
@@ -625,7 +627,7 @@ def load_data_WC(remove_small: bool = True):
 
     # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
     max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['date'].max()])
-    max_date = max_date - datetime.timedelta(days=3)  # max date set as 3 days prior to shared maximum date
+    max_date = max_date - datetime.timedelta(days=5)  # max date set as 5 days prior to shared maximum date
 
     # filter out maximum date
     df_deaths = df_deaths[df_deaths['date'] <= max_date]
@@ -634,7 +636,7 @@ def load_data_WC(remove_small: bool = True):
 
     # sort by date
     df_deaths = df_deaths.sort_values('date')
-    df_confirmed = df_confirmed.sort_values('date')
+    df_confirmed =  df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('date')
 
     logging.info('Taking intersection of dates in all dataframes')

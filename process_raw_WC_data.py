@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_path', type=str, default='data/202005 WCDoH Covid19 admissions data v3.csv',
+parser.add_argument('--data_path', type=str, default='data/AdmissionsList.csv',#  202005 WCDoH Covid19 admissions data v3.csv',
                     help='Location of the data')
 
 
@@ -27,9 +27,12 @@ def main():
     # load data
     logging.info(f'Loading data from {args.data_path}')
 
-    date_cols = ['date_of_diagnosis', 'discharge_date', 'Date_of_ICU_admission', 'Admission_date']
+    date_cols = ['discharge_date', 'Date_of_ICU_admission', 'Admission_date']
     df_WC = pd.read_csv(data_path,
                         parse_dates=date_cols)
+    
+    # remove records with discharge date pre admission date
+    df_WC = df_WC[~(df_WC['discharge_date'] < df_WC['Admission_date'])].reset_index()
 
     # construct date range
     min_date = df_WC[date_cols].min().min()

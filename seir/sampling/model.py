@@ -17,15 +17,15 @@ class SamplingNInfectiousModel:
                  nb_groups: int,
                  beta=None,
                  rel_lockdown5_beta=0.75,
-                 rel_lockdown4_beta=0.8,
-                 rel_lockdown3_beta=0.8,
-                 rel_lockdown2_beta=0.8,
+                 rel_lockdown4_beta=0.6,
+                 rel_lockdown3_beta=0.6,
+                 rel_lockdown2_beta=0.7,
                  rel_postlockdown_beta=0.8,
                  rel_beta_as=None,
-                 period_lockdown5=35,
-                 period_lockdown4=28,
-                 period_lockdown3=28,
-                 period_lockdown2=28,
+                 period_lockdown5=35,  # 5 weeks from 27 March to 30 April
+                 period_lockdown4=66,  # May
+                 period_lockdown3=96,  # June
+                 period_lockdown2=127,  # July
                  prop_a=None,
                  prop_m=None,
                  prop_s_to_h=None,
@@ -195,7 +195,7 @@ class SamplingNInfectiousModel:
                 return 1
             elif -11 <= t < 0:
                 # pre lockdown smoothing
-                return 1 - (1 - rel_lockdown5_beta) / 11 * (t - 11)
+                return 1 - (1 - rel_lockdown5_beta) / 11 * (t + 11)
             elif 0 <= t < period_lockdown5:
                 # lockdown level 5
                 return rel_lockdown5_beta
