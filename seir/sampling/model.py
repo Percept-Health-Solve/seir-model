@@ -17,10 +17,10 @@ class SamplingNInfectiousModel:
                  nb_groups: int,
                  beta=None,
                  rel_lockdown5_beta=0.75,
-                 rel_lockdown4_beta=0.6,
-                 rel_lockdown3_beta=0.6,
-                 rel_lockdown2_beta=0.7,
-                 rel_postlockdown_beta=0.8,
+                 rel_lockdown4_beta=0.8,
+                 rel_lockdown3_beta=0.8,
+                 rel_lockdown2_beta=0.8,
+                 rel_postlockdown_beta=0.9,
                  rel_beta_as=None,
                  period_lockdown5=35,  # 5 weeks from 27 March to 30 April
                  period_lockdown4=66,  # May
@@ -50,6 +50,9 @@ class SamplingNInfectiousModel:
         # infectious and relative to infectious rates
         beta = np.asarray(beta)
         rel_lockdown5_beta = np.asarray(rel_lockdown5_beta)
+        rel_lockdown4_beta = np.asarray(rel_lockdown4_beta)
+        rel_lockdown3_beta = np.asarray(rel_lockdown3_beta)
+        rel_lockdown2_beta = np.asarray(rel_lockdown2_beta)
         rel_postlockdown_beta = np.asarray(rel_postlockdown_beta)
         rel_beta_as = np.asarray(rel_beta_as)
 
@@ -94,6 +97,9 @@ class SamplingNInfectiousModel:
         beta_vars = {
             'beta': beta,
             'rel_lockdown5_beta': rel_lockdown5_beta,
+            'rel_lockdown4_beta': rel_lockdown4_beta,
+            'rel_lockdown3_beta': rel_lockdown3_beta,
+            'rel_lockdown2_beta': rel_lockdown2_beta,
             'rel_postlockdown_beta': rel_postlockdown_beta,
             'rel_beta_as': rel_beta_as
         }
