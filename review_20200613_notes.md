@@ -41,6 +41,8 @@
 
 * have not updated assumptions for `prop_h_to_c` given time constraints
 
+* need to be able to easily generate a single run on deterministic parameters, not calibrated to data, with output plots that would exclude confidence intervals (not clear to me how this is possible from current code structure)
+
 ## Calibration run commands
 
 ### Test run
