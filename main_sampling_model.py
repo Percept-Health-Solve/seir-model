@@ -35,15 +35,15 @@ parser.add_argument('--only_process_runs', action='store_true')
 parser.add_argument('--only_plot', action='store_true')
 
 parser.add_argument('--t0', type=int, default=-50, help='Day relative to the start of lockdown to seed the model.')
-parser.add_argument('--e0_range', type=float, default=[0, 1e-5],
+parser.add_argument('--e0_range', type=float, default=[0, 1e-5], nargs=2,
                     help='Lower and upper bounds to for the uniform prior distribution of e0.')
 
-parser.add_argument('--r0_range', type=float, default=[1.5, 3.5],
+parser.add_argument('--r0_range', type=float, default=[1.5, 3.5], nargs=2,
                     help='Lower and upper bounds to for the uniform prior distribution of R0.')
-parser.add_argument('--rel_beta_as_range', type=float, default=[0.3, 1],
+parser.add_argument('--rel_beta_as_range', type=float, default=[0.3, 1], nargs=2,
                     help='Lower and upper bounds to for the uniform prior distribution of the relative infectivity '
                          'level of asymptomatic cases.')
-parser.add_argument('--rel_lockdown5_beta_range', type=float, default=[0.4, 1],
+parser.add_argument('--rel_lockdown5_beta_range', type=float, default=[0.4, 1], nargs=2,
                     help='Lower and upper bounds for the uniform prior distribution of the relative beta '
                          'experience during level 5 lockdown.')
 parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
@@ -51,12 +51,12 @@ parser.add_argument('--rel_postlockdown_beta', type=float, default=0.8,
 
 parser.add_argument('--prop_as_range', type=float, default=[0.5, 0.5], nargs=2,
                     help='Lower and upper bounds to for the uniform prior distribution of the proportion asymptomatic.')
-parser.add_argument('--prop_s_to_h_range', type=float, default=[0.8875, 0.8875],
+parser.add_argument('--prop_s_to_h_range', type=float, default=[0.8875, 0.8875], nargs=2,
                     help='Lower and upper bounds to for the uniform prior distribution of proportion severe moving '
                          'to hospital.')
 
-parser.add_argument('--time_infectious_range', type=float, default=[1.5, 2.6],
-                    help='Lower and upper bounds to for the uniform prior distribution of time of infectiousens.')
+parser.add_argument('--time_infectious_range', type=float, default=[1.5, 2.6], nargs=2,
+                    help='Lower and upper bounds to for the uniform prior distribution of time of infectiousness.')
 
 parser.add_argument('--fit_interval', type=int, default=0,
                     help='Number of days between which to consider fitting. Zero indicates fitting to all data.')
@@ -68,6 +68,8 @@ parser.add_argument('--contact_k', type=float, default=0.25,
 
 parser.add_argument('--likelihood', type=str, default='lognormal',
                     help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
+
+parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
 
 
 def main():
