@@ -120,7 +120,7 @@ def main():
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -- %(message)s',
                         datefmt='%H:%M:%S',
                         level=logging.INFO,
-                        filename=f'data/{args.model_name}.log')
+                        filename=None if args.log_to_file == '' else args.log_to_file)
 
     # log training runs and samples
     logging.warning(f"Training model for {args.nb_runs} run(s) with {args.nb_samples} samples "
@@ -310,10 +310,10 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
-            mort_loading = np.random.uniform(0.65, 1.1, size=(nb_samples, 1))
-            prop_h_to_c = np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
-            prop_h_to_d = mort_loading * np.array([[0.011,0.042,0.045,0.063,0.096,0.245,0.408,0.448,0.526]])
-            prop_c_to_d = mort_loading * np.array([[0.011,0.042,0.410,0.540,0.590,0.650,0.660,0.670,.710]])
+            mort_loading = np.random.uniform(0.3, 1.1, size=(nb_samples, 1))
+            prop_h_to_c = 6/119  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
+            prop_h_to_d = mort_loading * np.array([[0.011, 0.042, 0.045, 0.063, 0.096, 0.245, 0.408, 0.448, 0.526]])
+            prop_c_to_d = mort_loading * np.array([[0.011, 0.042, 0.410, 0.540, 0.590, 0.650, 0.660, 0.670, .710]])
     else:
         # load df
         logging.info(f"Loading proportion priors from {load_prior_file}")
@@ -375,10 +375,18 @@ def build_and_solve_model(t_obs,
     y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
     t0 = args.t0
 
+    rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta-0.05, 1, size=(nb_samples, 1))
+    rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta-0.05, 1, size=(nb_samples, 1))
+    rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta-0.05, 1, size=(nb_samples, 1))
+    rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta-0.05, 1, size=(nb_samples, 1))
+
     model = SamplingNInfectiousModel(
         nb_groups=9 if args.age_groups else 1,
         beta=beta,
         rel_lockdown5_beta=rel_lockdown5_beta,
+        rel_lockdown4_beta=rel_lockdown4_beta,
+        rel_lockdown3_beta=rel_lockdown3_beta,
+        rel_lockdown2_beta=rel_lockdown2_beta,
         rel_postlockdown_beta=rel_postlockdown_beta,
         rel_beta_as=rel_beta_as,
         prop_a=prop_a,
@@ -547,7 +555,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
         elif args.fit_data.lower() == 'national':
             filter = 'Grand Total'
         if args.fit_data.lower() == 'wc':
-            df_pop['Western Cape'] = df_pop['Western Cape'] * 7000000 / df_pop['Western Cape'].sum()   # adjust to Andrew's 7m for now
+            df_pop['Western Cape'] = df_pop['Western Cape'] * 7000000 / df_pop[
+                'Western Cape'].sum()  # adjust to Andrew's 7m for now
         for i in range(nb_groups):
             y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0]
             y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0]
@@ -638,7 +647,7 @@ def load_data_WC(remove_small: bool = True):
 
     # sort by date
     df_deaths = df_deaths.sort_values('date')
-    df_confirmed =  df_confirmed.sort_values('date')
+    df_confirmed = df_confirmed.sort_values('date')
     df_hosp_icu = df_hosp_icu.sort_values('date')
 
     logging.info('Taking intersection of dates in all dataframes')
@@ -884,15 +893,17 @@ def calculate_resample(t_obs,
     cfr = d_tot / cum_detected_samples
     hfr = d_tot / np.sum(h_r + h_d + h_c + c_r + c_d + r_h + r_c + d_h + d_c, axis=2)
     atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / model.n.reshape(-1)
+    mort_rate = d_tot / np.sum(r_h + r_c, axis=2)
 
     logging.info('Plotting solutions')
 
-    fig, axes = plt.subplots(2, 8, figsize=(32, 8))
+    fig, axes = plt.subplots(2, 8, figsize=(36, 8))
 
-    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, ifr, cfr, hfr, atr]
-    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, None, None, None, None]
+    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, ifr, cfr, hfr, atr, mort_rate]
+    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, None, None, None, None, None]
     titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths',
-              'Infection Fatality Ratio', 'Case Fatality Ratio', 'Hospital Fatality Ratio', 'Attack Rate']
+              'Infection Fatality Ratio', 'Case Fatality Ratio', 'Hospital Fatality Ratio', 'Attack Rate',
+              'Hospital Mortality Rate']
 
     logging.info('Generating timeseries summary stats and plotting')
     summary_stats = {}
