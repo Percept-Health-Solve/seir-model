@@ -940,9 +940,9 @@ def calculate_resample(t_obs,
                         axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
                     else:
                         axes[j, i].plot(t_date[1:], obs_vars[i], 'x', c='C1')
-                    axes[j, i].set_ylim((min(np.min(obs_vars[i]), np.min(mu[50])) * 0.5, max(np.max(obs_vars[i]), np.max(mu[110])) * 1.1))
+                    axes[j, i].set_ylim((min(np.min(obs_vars[i]), np.min(mu[50])) * 0.5, max(np.max(obs_vars[i]), np.max(mu[120])) * 1.1))
                 else:
-                    axes[j, i].set_ylim((np.min(mu[50])*0.5, np.max(mu[130]) * 1.5))
+                    axes[j, i].set_ylim((np.min(mu[50])*0.5, np.max(mu[120]) * 1.5))
                 axes[j, i].set_xlim(
                     (pd.to_datetime('2020/03/27'), np.max(t_date) + datetime.timedelta(days=1))
                 )
