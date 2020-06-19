@@ -69,6 +69,9 @@ parser.add_argument('--contact_k', type=float, default=0.25,
 parser.add_argument('--likelihood', type=str, default='lognormal',
                     help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
 
+parser.add_argument('--mort_loading_range', default=[0.3, 1.1], type=float, nargs=2,
+                    help='Mortality loading uniform distribution range')
+
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
 
 
@@ -299,7 +302,7 @@ def build_and_solve_model(t_obs,
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
-            mort_loading = np.random.uniform(0.65, 1.1, size=(nb_samples, 1))
+            mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
             prop_h_to_c = 119 / 825
             prop_h_to_d = mort_loading * 270 / 1704
             prop_c_to_d = mort_loading * 54 / 119
@@ -310,7 +313,7 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
-            mort_loading = np.random.uniform(0.3, 1.1, size=(nb_samples, 1))
+            mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
             prop_h_to_c = 6/119  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
             prop_h_to_d = mort_loading * np.array([[0.011, 0.042, 0.045, 0.063, 0.096, 0.245, 0.408, 0.448, 0.526]])
             prop_c_to_d = mort_loading * np.array([[0.011, 0.042, 0.410, 0.540, 0.590, 0.650, 0.660, 0.670, .710]])
@@ -440,6 +443,10 @@ def build_and_solve_model(t_obs,
 
     resample_vars['e0'] = e0_resample
     scalar_vars['t0'] = t0
+
+    # hack mort loading into plot
+    calc_sample_vars['mort_loading'] = mort_loading
+    calc_resample_vars['mort_loading'] = mort_loading[model.resample_indices]
 
     # save model variables
     save_model_variables(model, base=model_base)
@@ -639,11 +646,17 @@ def load_data_WC(remove_small: bool = True):
     # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
     max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['date'].max()])
     max_date = max_date - datetime.timedelta(days=5)  # max date set as 5 days prior to shared maximum date
+    min_date = max_date - datetime.timedelta(days=35) # min date set to 30 days prior the maximum date, to remove noise
 
-    # filter out maximum date
+    # filter maximum date
     df_deaths = df_deaths[df_deaths['date'] <= max_date]
     df_confirmed = df_confirmed[df_confirmed['date'] <= max_date]
     df_hosp_icu = df_hosp_icu[df_hosp_icu['date'] <= max_date]
+
+    # filter minimum date
+    df_deaths = df_deaths[df_deaths['date'] >= min_date]
+    df_confirmed = df_confirmed[df_confirmed['date'] >= min_date]
+    df_hosp_icu = df_hosp_icu[df_hosp_icu['date'] >= min_date]
 
     # sort by date
     df_deaths = df_deaths.sort_values('date')
@@ -890,20 +903,23 @@ def calculate_resample(t_obs,
     c_tot = np.sum(c_r + c_d, axis=2)
     d_tot = np.sum(d_c + d_h, axis=2)
     ifr = d_tot / np.sum(y[:, :, :, 2:], axis=(2, 3))
-    cfr = d_tot / cum_detected_samples
-    hfr = d_tot / np.sum(h_r + h_d + h_c + c_r + c_d + r_h + r_c + d_h + d_c, axis=2)
+    hfr = d_tot / np.sum(r_h + r_c + d_h + d_c, axis=2)
     atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / model.n.reshape(-1)
-    mort_rate = d_tot / np.sum(r_h + r_c, axis=2)
+
+    daily_deaths = np.diff(d_tot, axis=0, prepend=0)
+    d_icu_obs_daily = np.diff(d_icu_obs)
+    print(daily_deaths.shape)
 
     logging.info('Plotting solutions')
 
-    fig, axes = plt.subplots(2, 8, figsize=(36, 8))
+    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, daily_deaths, ifr, hfr, atr]
+    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, d_icu_obs_daily, None, None, None]
+    titles = ['Total Infected', 'Cum Hospitalised', 'Cum ICU', 'Cum Deaths', 'Daily Deaths',
+              'Infection Fatality Ratio', 'Outpatient Fatality Ratio', 'Attack Rate']
 
-    pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, ifr, cfr, hfr, atr, mort_rate]
-    obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, None, None, None, None, None]
-    titles = ['Detected', 'Hospitalised', 'ICU', 'Deaths',
-              'Infection Fatality Ratio', 'Case Fatality Ratio', 'Hospital Fatality Ratio', 'Attack Rate',
-              'Hospital Mortality Rate']
+    assert len(pred_vars) == len(obs_vars) and len(obs_vars) == len(titles)
+
+    fig, axes = plt.subplots(2, len(pred_vars), figsize=(len(pred_vars) * 4, 8))
 
     logging.info('Generating timeseries summary stats and plotting')
     summary_stats = {}
@@ -920,10 +936,13 @@ def calculate_resample(t_obs,
             # axes[i].plot(tt, pred_vars[i][:, :, 0], c='k', alpha=0.1)
             if j == 0:
                 if obs_vars[i] is not None:
-                    axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
-                    axes[j, i].set_ylim((0, np.max(obs_vars[i]) * 1.05))
+                    if len(obs_vars[i]) == len(t_date):
+                        axes[j, i].plot(t_date, obs_vars[i], 'x', c='C1')
+                    else:
+                        axes[j, i].plot(t_date[1:], obs_vars[i], 'x', c='C1')
+                    axes[j, i].set_ylim((min(np.min(obs_vars[i]), np.min(mu[50])) * 0.5, max(np.max(obs_vars[i]), np.max(mu[110])) * 1.1))
                 else:
-                    axes[j, i].set_ylim((0, np.max(mu[130]) * 1.5))
+                    axes[j, i].set_ylim((np.min(mu[50])*0.5, np.max(mu[130]) * 1.5))
                 axes[j, i].set_xlim(
                     (pd.to_datetime('2020/03/27'), np.max(t_date) + datetime.timedelta(days=1))
                 )
@@ -934,9 +953,9 @@ def calculate_resample(t_obs,
                 axes[j, i].plot(tt_date, pred_vars[i][:, arg_975], c='C3', ls='--')
                 axes[j, i].set_xlabel('Date')
 
-            summary_stats[f'{titles[i]}_mean'] = mu.reshape(-1)
-            summary_stats[f'{titles[i]}_2.5CI'] = low.reshape(-1)
-            summary_stats[f'{titles[i]}_97.5CI'] = high.reshape(-1)
+            summary_stats[f'{titles[i]} Mean'] = mu.reshape(-1)
+            summary_stats[f'{titles[i]} 2.5CI'] = low.reshape(-1)
+            summary_stats[f'{titles[i]} 97.5CI'] = high.reshape(-1)
 
     plt.tight_layout()
     logging.info(f'Saving plot to {model_base}_prediction.png')
