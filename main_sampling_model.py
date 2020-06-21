@@ -302,6 +302,10 @@ def build_and_solve_model(t_obs,
         r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
         rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
+        rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, 1, size=(nb_samples, 1))
+        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, 1, size=(nb_samples, 1))
+        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, 1, size=(nb_samples, 1))
+        rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.05, 1, size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
@@ -337,7 +341,7 @@ def build_and_solve_model(t_obs,
             # get mean variables
             load_and_randomise = lambda x: np.random.normal(
                 df_priors[x].to_numpy().reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0),
-                df_priors[x].to_numpy().reshape(nb_prior_samples, nb_prior_groups).std(axis=0)
+                df_priors[x].to_numpy().reshape(nb_prior_samples, nb_prior_groups).std(axis=0)/10
             )
 
         elif load_prior_file.suffix == '.pkl':
@@ -362,10 +366,11 @@ def build_and_solve_model(t_obs,
         nb_samples = nb_repeats * nb_prior_samples
 
         # set random vars
-        time_infectious = load_and_randomise('time_infectious')
+        print(df_priors['time_infectious'].std(axis=0))
+        time_infectious = load_and_randomise('time_infectious').clip(min=0)
         # TODO: Change these if else statements, rather use a default value in the function instead?
         if 'prop_a' in df_priors:
-            prop_a = load_and_randomise('prop_a')
+            prop_a = load_and_randomise('prop_a').clip(min=0, max=1)
         else:
             prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         if args.age_groups:
@@ -373,27 +378,28 @@ def build_and_solve_model(t_obs,
         else:
             prop_m = (1 - prop_a) * 0.957  # ferguson
         if 'prop_s_to_h' in df_priors:
-            prop_s_to_h = load_and_randomise('prop_s_to_h')
+            prop_s_to_h = load_and_randomise('prop_s_to_h').clip(min=0, max=1)
         else:
             prop_s_to_h = _uniform_from_range(args.prop_s_to_h, size=(nb_samples, 1))
-        beta = load_and_randomise('beta')
-        rel_lockdown5_beta = load_and_randomise('rel_lockdown5_beta')
-        rel_beta_as = load_and_randomise('rel_beta_as')
+        beta = load_and_randomise('beta').clip(min=0)
+        rel_lockdown5_beta = load_and_randomise('rel_lockdown5_beta').clip(min=0, max=1)
+        rel_lockdown4_beta = load_and_randomise('rel_lockdown4_beta').clip(min=rel_lockdown5_beta-0.05, max=1)
+        rel_lockdown3_beta = load_and_randomise('rel_lockdown3_beta').clip(min=rel_lockdown4_beta-0.05, max=1)
+        rel_lockdown2_beta = load_and_randomise('rel_lockdown2_beta').clip(min=rel_lockdown3_beta-0.05, max=1)
+        rel_beta_as = load_and_randomise('rel_beta_as').clip(min=0, max=1)
         if 'prop_h_to_c' in df_priors:
-            prop_h_to_c = load_and_randomise('prop_h_to_c')
+            prop_h_to_c = load_and_randomise('prop_h_to_c').clip(min=0, max=1)
         else:
             prop_h_to_c = 119 / 825 if args.age_groups else 6/119
-        prop_h_to_d = load_and_randomise('prop_h_to_d')
-        prop_c_to_d = load_and_randomise('prop_c_to_d')
-        e0 = load_and_randomise('e0')
+        prop_h_to_d = load_and_randomise('prop_h_to_d').clip(min=0, max=1)
+        prop_c_to_d = load_and_randomise('prop_c_to_d').clip(min=0, max=1)
+        e0 = load_and_randomise('e0').clip(min=1e-20)
+
+        mort_loading = prop_h_to_d / np.array([[0.011, 0.042, 0.045, 0.063, 0.096, 0.245, 0.408, 0.448, 0.526]])
+        mort_loading = mort_loading[:, 0:1]
 
     y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
     t0 = args.t0
-
-    rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta-0.05, 1, size=(nb_samples, 1))
-    rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta-0.05, 1, size=(nb_samples, 1))
-    rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta-0.05, 1, size=(nb_samples, 1))
-    rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta-0.05, 1, size=(nb_samples, 1))
 
     model = SamplingNInfectiousModel(
         nb_groups=9 if args.age_groups else 1,
