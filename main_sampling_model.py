@@ -335,8 +335,10 @@ def build_and_solve_model(t_obs,
             nb_prior_samples = int(len(df_priors) / nb_prior_groups)
 
             # get mean variables
-            get_mean = lambda x: df_priors[x].to_numpy() \
-                .reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0)
+            load_and_randomise = lambda x: np.random.normal(
+                df_priors[x].to_numpy().reshape(nb_prior_samples, nb_prior_groups).repeat(nb_repeats, axis=0),
+                df_priors[x].to_numpy().reshape(nb_prior_samples, nb_prior_groups).std(axis=0)
+            )
 
         elif load_prior_file.suffix == '.pkl':
             logging.info('Loading pkl file')
@@ -351,7 +353,8 @@ def build_and_solve_model(t_obs,
                     assert nb_prior_samples == value.shape[0]
 
             # get mean variables
-            get_mean = lambda x: df_priors[x].repeat(nb_repeats, axis=0)
+            load_and_randomise = lambda x: np.random.normal(df_priors[x].repeat(nb_repeats, axis=0),
+                                                            scale=df_priors[x].std(axis=0)/10)
 
         nb_repeats = int(nb_samples / nb_prior_samples)
 
@@ -359,11 +362,10 @@ def build_and_solve_model(t_obs,
         nb_samples = nb_repeats * nb_prior_samples
 
         # set random vars
-        random_scale = 0.0001
-        time_infectious = np.random.normal(get_mean('time_infectious'), scale=random_scale)
+        time_infectious = load_and_randomise('time_infectious')
         # TODO: Change these if else statements, rather use a default value in the function instead?
         if 'prop_a' in df_priors:
-            prop_a = np.random.normal(get_mean('prop_a'), scale=random_scale).clip(min=0, max=1)
+            prop_a = load_and_randomise('prop_a')
         else:
             prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         if args.age_groups:
@@ -371,16 +373,19 @@ def build_and_solve_model(t_obs,
         else:
             prop_m = (1 - prop_a) * 0.957  # ferguson
         if 'prop_s_to_h' in df_priors:
-            prop_s_to_h = np.random.normal(get_mean('prop_s_to_h'), scale=random_scale).clip(min=0, max=1)
+            prop_s_to_h = load_and_randomise('prop_s_to_h')
         else:
             prop_s_to_h = _uniform_from_range(args.prop_s_to_h, size=(nb_samples, 1))
-        beta = np.random.normal(get_mean('beta'), scale=random_scale).clip(min=0)
-        rel_lockdown5_beta = np.random.normal(get_mean('rel_lockdown5_beta'), scale=random_scale).clip(min=0, max=1)
-        rel_beta_as = np.random.normal(get_mean('rel_beta_as'), scale=random_scale).clip(min=0, max=1)
-        prop_h_to_c = np.random.normal(get_mean('prop_h_to_c'), scale=random_scale).clip(min=0, max=1)
-        prop_h_to_d = np.random.normal(get_mean('prop_h_to_d'), scale=random_scale).clip(min=0, max=1)
-        prop_c_to_d = np.random.normal(get_mean('prop_c_to_d'), scale=random_scale).clip(min=0, max=1)
-        e0 = get_mean('e0')
+        beta = load_and_randomise('beta')
+        rel_lockdown5_beta = load_and_randomise('rel_lockdown5_beta')
+        rel_beta_as = load_and_randomise('rel_beta_as')
+        if 'prop_h_to_c' in df_priors:
+            prop_h_to_c = load_and_randomise('prop_h_to_c')
+        else:
+            prop_h_to_c = 119 / 825 if args.age_groups else 6/119
+        prop_h_to_d = load_and_randomise('prop_h_to_d')
+        prop_c_to_d = load_and_randomise('prop_c_to_d')
+        e0 = load_and_randomise('e0')
 
     y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
     t0 = args.t0
