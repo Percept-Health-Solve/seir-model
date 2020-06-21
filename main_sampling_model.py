@@ -241,7 +241,14 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
     with open(f'{model_base}_group.pkl', 'wb') as f:
         pickle.dump(group, f)
 
-    plot_prior_posterior(model_base, full_samples, resample_vars)
+    model = SamplingNInfectiousModel(
+        **scalar,
+        **group,
+        **resample_vars
+    )
+
+    plot_prior_posterior(model_base, full_samples, resample_vars,
+                         model.calculated_sample_vars, model.calculated_resample_vars)
 
 
 def build_and_solve_model(t_obs,
