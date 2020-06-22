@@ -241,11 +241,16 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
     with open(f'{model_base}_group.pkl', 'wb') as f:
         pickle.dump(group, f)
 
+    scalar.pop('t0')
+    e0 = resample_vars.pop('e0')
+
     model = SamplingNInfectiousModel(
         **scalar,
         **group,
         **resample_vars
     )
+
+    resample_vars['e0'] = e0
 
     plot_prior_posterior(model_base, full_samples, resample_vars,
                          model.calculated_sample_vars, model.calculated_resample_vars)
