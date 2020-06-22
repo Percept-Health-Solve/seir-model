@@ -189,7 +189,7 @@ def main():
         # process runs to single output
         logging.info(f'Processing results from {args.nb_runs} runs')
         nb_process_resamples = int(args.ratio_resample * args.nb_runs * args.nb_samples)
-        process_multi_run(args.nb_runs, nb_process_resamples, output_dir, args.model_name)
+        process_multi_run(args.nb_runs, nb_process_resamples, output_dir, args.model_name, args)
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
     else:
         if not args.only_plot:
@@ -197,7 +197,7 @@ def main():
         calculate_resample(t_obs, i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, args=args, model_base=model_base)
 
 
-def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
+def process_multi_run(nb_runs, nb_resamples, output_dir, model_name, args):
     full_samples = None
     for i in range(nb_runs):
         model_run_base = output_dir.joinpath(f'{i:02}_{model_name}')
@@ -248,13 +248,17 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
         nb_groups = np.max([nb_groups, value.shape[-1]])
 
     scalar_vars.pop('t0')
-    e0 = resample_vars.pop('e0')
+    e0 = resample_vars.pop('e0', None)
 
+    y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
+
+    # TODO: Create a static method that returns the deterministic variables
     model = SamplingNInfectiousModel(
         nb_groups=nb_groups,
         **scalar_vars,
         **group_vars,
-        **resample_vars
+        **resample_vars,
+        y0=y0
     )
 
     resample_vars['e0'] = e0
