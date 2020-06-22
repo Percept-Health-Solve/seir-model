@@ -250,7 +250,7 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name, args):
     scalar_vars.pop('t0')
     e0 = resample_vars.pop('e0', None)
 
-    y0, e0 = create_y0(args, nb_samples, nb_groups, e0=e0)
+    y0, e0 = create_y0(args, nb_resamples, nb_groups, e0=e0)
 
     # TODO: Create a static method that returns the deterministic variables
     model = SamplingNInfectiousModel(
