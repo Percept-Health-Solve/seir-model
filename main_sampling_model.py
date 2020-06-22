@@ -232,21 +232,28 @@ def process_multi_run(nb_runs, nb_resamples, output_dir, model_name):
         pickle.dump(full_samples, f)
 
     with open(f'{model_run_base}_scalar.pkl', 'rb') as f:
-        scalar = pickle.load(f)
+        scalar_vars = pickle.load(f)
     with open(f'{model_run_base}_group.pkl', 'rb') as f:
-        group = pickle.load(f)
+        group_vars = pickle.load(f)
 
     with open(f'{model_base}_scalar.pkl', 'wb') as f:
-        pickle.dump(scalar, f)
+        pickle.dump(scalar_vars, f)
     with open(f'{model_base}_group.pkl', 'wb') as f:
-        pickle.dump(group, f)
+        pickle.dump(group_vars, f)
 
-    scalar.pop('t0')
+    nb_groups = 1
+    for key, value in group_vars.items():
+        nb_groups = np.max([nb_groups, value.shape[-1]])
+    for key, value in resample_vars.items():
+        nb_groups = np.max([nb_groups, value.shape[-1]])
+
+    scalar_vars.pop('t0')
     e0 = resample_vars.pop('e0')
 
     model = SamplingNInfectiousModel(
-        **scalar,
-        **group,
+        nb_groups=nb_groups,
+        **scalar_vars,
+        **group_vars,
         **resample_vars
     )
 
