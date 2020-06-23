@@ -10,3 +10,4 @@ scipy==1.4.1
 seaborn==0.10.0
 six==1.14.0
 xlrd==1.2.0
+lifelines==0.24.8
