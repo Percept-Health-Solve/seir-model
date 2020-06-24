@@ -341,9 +341,9 @@ def build_and_solve_model(t_obs,
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
             mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
-            prop_h_to_c = 6/119  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
             prop_h_to_d = mort_loading * np.array([[0.011, 0.042, 0.045, 0.063, 0.096, 0.245, 0.408, 0.448, 0.526]])
             prop_c_to_d = mort_loading * np.array([[0.011, 0.042, 0.410, 0.540, 0.590, 0.650, 0.660, 0.670, .710]])
+            prop_h_to_c = 6/1238  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
     else:
         # load df
         logging.info(f"Loading proportion priors from {load_prior_file}")
