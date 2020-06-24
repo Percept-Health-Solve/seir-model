@@ -330,7 +330,7 @@ def build_and_solve_model(t_obs,
             # inform variables from the WC experience, not controlling for age
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
             mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
-            prop_h_to_c = 119 / 825
+            prop_h_to_c = 6/1238
             prop_h_to_d = mort_loading * 270 / 1704
             prop_c_to_d = mort_loading * 54 / 119
         else:
@@ -948,7 +948,7 @@ def calculate_resample(t_obs,
 
     pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, daily_deaths, ifr, hfr, atr]
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, d_icu_obs_daily, None, None, None]
-    titles = ['Total Infected', 'Cum Hospitalised', 'Cum ICU', 'Cum Deaths', 'Daily Deaths',
+    titles = ['Total Infected', 'Current Hospitalised', 'Current ICU', 'Cum Deaths', 'Daily Deaths',
               'Infection Fatality Ratio', 'Outpatient Fatality Ratio', 'Attack Rate']
 
     assert len(pred_vars) == len(obs_vars) and len(obs_vars) == len(titles)
