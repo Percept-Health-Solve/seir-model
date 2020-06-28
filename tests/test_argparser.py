@@ -3,6 +3,7 @@ from typing import Optional, List
 import argparse
 
 from seir.argparser import DataClassArgumentParser
+from seir.cli import AssaCovidModelCLI
 
 
 @dataclass
@@ -118,3 +119,8 @@ def test_accept_list():
     assert is_dataclass(args2)
     assert args1 == BasicArgs(test_int=1, test_float=1.1, test_str='xyz', test_bool=False)
     assert args2 == BasicArgs2(test_args=1)
+
+
+def test_covid_model_cli_args():
+    parser = DataClassArgumentParser(AssaCovidModelCLI)
+    assert parser is not None
