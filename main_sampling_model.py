@@ -73,6 +73,7 @@ parser.add_argument('--mort_loading_range', default=[0.3, 1.1], type=float, narg
                     help='Mortality loading uniform distribution range')
 
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
+parser.add_argument('--prop_immune', type=float, default=0)
 
 
 def main():
@@ -568,8 +569,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
         elif args.fit_data.lower() == 'national':
             df_pop = df_pop['Grand Total']
         total_pop = df_pop.sum()
-        y0[:, :, 0] = (1 - e0) * total_pop
-        y0[:, :, 1] = e0 * total_pop
+        y0[:, :, 0] = (1 - e0) * total_pop * (1 - args.prop_immune)
+        y0[:, :, 1] = e0 * total_pop * (1 - args.prop_immune)
     else:
         # multiple population groups as a result of age bands
         # have to proportion the starting populations respectively
@@ -599,8 +600,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
             df_pop['Western Cape'] = df_pop['Western Cape'] * 7000000 / df_pop[
                 'Western Cape'].sum()  # adjust to Andrew's 7m for now
         for i in range(nb_groups):
-            y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0]
-            y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0]
+            y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0] * (1 - args.prop_immune)
+            y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0] * (1 - args.prop_immune)
     y0 = y0.reshape(-1)
     return y0, e0
 
@@ -938,7 +939,7 @@ def calculate_resample(t_obs,
     d_tot = np.sum(d_c + d_h, axis=2)
     ifr = d_tot / np.sum(y[:, :, :, 2:], axis=(2, 3))
     hfr = d_tot / np.sum(r_h + r_c + d_h + d_c, axis=2)
-    atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / model.n.reshape(-1)
+    atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / (model.n.reshape(-1) / (1 - args.prop_immune))
 
     daily_deaths = np.diff(d_tot, axis=0, prepend=0)
     d_icu_obs_daily = np.diff(d_icu_obs)
@@ -949,7 +950,7 @@ def calculate_resample(t_obs,
     pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, daily_deaths, ifr, hfr, atr]
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, d_icu_obs_daily, None, None, None]
     titles = ['Total Infected', 'Current Hospitalised', 'Current ICU', 'Cum Deaths', 'Daily Deaths',
-              'Infection Fatality Ratio', 'Outpatient Fatality Ratio', 'Attack Rate']
+              'Infection Fatality Ratio', 'Inpatient Fatality Ratio', 'Attack Rate']
 
     assert len(pred_vars) == len(obs_vars) and len(obs_vars) == len(titles)
 
