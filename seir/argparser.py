@@ -150,8 +150,8 @@ class DataClassArgumentParser(ArgumentParser):
             return (*outputs, remaining_args)
         else:
             if remaining_args:
-                raise ValueError(f"Some specified arguments are not used by the HfArgumentParser: {remaining_args}")
-
+                raise ValueError(f"Some specified arguments are not used by the DataClassArgumentParser: "
+                                 f"{remaining_args}")
             return (*outputs,)
 
     def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
