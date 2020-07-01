@@ -319,10 +319,10 @@ def build_and_solve_model(t_obs,
         r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
         rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
-        rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.05, 1, size=(nb_samples, 1))
+        rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, (rel_lockdown5_beta+0.2).clip(max=1), size=(nb_samples, 1))
+        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=0.9), size=(nb_samples, 1))
+        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=0.8), size=(nb_samples, 1))
+        rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.01, (rel_lockdown2_beta+0.1), size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
@@ -332,7 +332,7 @@ def build_and_solve_model(t_obs,
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
             mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
             prop_h_to_c = 6/1238
-            prop_h_to_d = mort_loading * 270 / 1704
+            prop_h_to_d = mort_loading * 103 / 825
             prop_c_to_d = mort_loading * 54 / 119
         else:
             logging.info('Using 9 age groups, corresponding to 10 year age bands.')
@@ -681,7 +681,7 @@ def load_data_WC(remove_small: bool = True):
     # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
     max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['date'].max()])
     max_date = max_date - datetime.timedelta(days=5)  # max date set as 5 days prior to shared maximum date
-    min_date = max_date - datetime.timedelta(days=35) # min date set to 30 days prior the maximum date, to remove noise
+    min_date = max_date - datetime.timedelta(days=45) # min date set to 30 days prior the maximum date, to remove noise
 
     # filter maximum date
     df_deaths = df_deaths[df_deaths['date'] <= max_date]
