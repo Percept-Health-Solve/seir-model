@@ -150,7 +150,7 @@ def main():
                          f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
 
     # save model args to config file
-    if not args.only_process_runs:
+    if not args.only_process_runs and not args.only_plot:
         with open(output_dir.joinpath(f"{args.model_name}_config.json"), 'wt') as f:
             # save the json, but don't include the overwrite or from_json commands
             cmds = vars(args).copy()
