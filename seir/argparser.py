@@ -50,6 +50,8 @@ class DataClassArgumentParser(ArgumentParser):
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         for field in dataclasses.fields(dtype):
+            if not field.init:
+                continue
             field_name = f"--{field.name}"
             kwargs = field.metadata.copy()
             # field.metadata is not used at all by Data Classes,
@@ -137,7 +139,7 @@ class DataClassArgumentParser(ArgumentParser):
         namespace, remaining_args = self.parse_known_args(args=args)
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
             for k in keys:
                 delattr(namespace, k)
