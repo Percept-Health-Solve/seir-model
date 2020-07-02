@@ -6,8 +6,10 @@ import pandas as pd
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_path', type=str, default='data/AdmissionsList.csv',#  202005 WCDoH Covid19 admissions data v3.csv',
+parser.add_argument('--data_path', type=str, default='data/datafordave.csv',
                     help='Location of the data')
+parser.add_argument('--max_date', type=str, default='2020/06/30',
+                    help='Maximum possible date for the data')
 
 
 def main():
@@ -27,16 +29,27 @@ def main():
     # load data
     logging.info(f'Loading data from {args.data_path}')
 
-    date_cols = ['discharge_date', 'Date_of_ICU_admission', 'Admission_date']
+    date_cols = ['discharge_date', 'date_admitted_to_icu', 'Admission_date']
     df_WC = pd.read_csv(data_path,
                         parse_dates=date_cols)
     
     # remove records with discharge date pre admission date
     df_WC = df_WC[~(df_WC['discharge_date'] < df_WC['Admission_date'])].reset_index()
 
+    def admission_status(row):
+        if pd.isna(row['date_of_death']) and pd.isna(row['discharge_date']):
+            return 'Inpatient'
+        elif pd.isna(row['date_of_death']) and pd.notna(row['discharge_date']):
+            return 'Discharged'
+        elif pd.notna(row['date_of_death']):
+            return 'Died'
+
+    df_WC['admission_status'] = df_WC.apply(admission_status, axis=1)
+
     # construct date range
     min_date = df_WC[date_cols].min().min()
     max_date = df_WC[date_cols].max().max()
+    max_date = min(max_date, pd.to_datetime(args.max_date))
     logging.info(f'Constructing data from {min_date} to {max_date}')
     date_range = pd.date_range(
         start=min_date,
@@ -68,7 +81,7 @@ def current_hospital_patient(row, date):
     hospital_case = False
     if row['Admission_date'] <= date and (row['discharge_date'] >= date or pd.isna(row['discharge_date'])):
         # have a valid inpatient for this date, check if they are in hospital or in ICU
-        if row['Admitted_to_ICU'] == 'No' or date <= row['Date_of_ICU_admission']:
+        if row['admitted_to_icu'] == 'No' or date <= row['date_admitted_to_icu']:
             hospital_case = True
     return hospital_case
 
@@ -77,7 +90,7 @@ def current_icu_patient(row, date):
     icu_case = False
     if row['Admission_date'] <= date and (row['discharge_date'] >= date or pd.isna(row['discharge_date'])):
         # have a valid inpatient for this date, check if they are in hospital or in ICU
-        if row['Admitted_to_ICU'] == 'Yes' and date >= row['Date_of_ICU_admission']:
+        if row['admitted_to_icu'] == 'Yes' and date >= row['date_admitted_to_icu']:
             icu_case = True
     return icu_case
 
