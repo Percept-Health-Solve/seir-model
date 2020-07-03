@@ -1,9 +1,9 @@
 import numpy as np
 
 from dataclasses import dataclass, field
-from typing import Union, Iterable
+from typing import Union, Iterable, List
 
-from seir.cli import DistributionCLI, OdeCLI, LockdownCLI, SampleCLI, AgeCLI
+from seir.cli import DistributionCLI, OdeParamCLI, LockdownCLI, MetaVarsCLI
 
 
 @dataclass
@@ -12,7 +12,6 @@ class BaseSampleParams:
 
     def _assert_param_shape(self, name, param, nb_groups: int = None):
         param = np.asarray(param)
-        print(name, param.ndim)
         assert param.ndim == 0 or param.ndim == 2, \
             f"The number of dimensions of the values in `rel_beta_lockdown` should be 0 (a float) or 2 (a " \
             f"sampled/group vector). Found dimension {param.ndim} in `{name}'."
@@ -29,14 +28,14 @@ class BaseSampleParams:
         raise NotImplementedError
 
     @classmethod
-    def samples_from_cli(cls, nb_samples: int, clis: Union[DistributionCLI, Iterable[DistributionCLI]]):
+    def sample_from_cli(cls, clis: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int):
         if isinstance(clis, DistributionCLI):
             clis = [clis]
         kwargs = {}
         for cli in clis:
             cli_attrs = vars(cli).copy()
             for attr in cli_attrs:
-                kwargs[attr] = cli.parse_attr(attr, size=(1, nb_samples))
+                kwargs[attr] = cli.sample_attr(attr, size=(1, nb_samples))
         kwargs['nb_samples'] = nb_samples
         return cls(**kwargs)
 
@@ -44,30 +43,34 @@ class BaseSampleParams:
 @dataclass
 class LockdownParams(BaseSampleParams):
 
-    rel_beta_lockdown: Iterable[Union[float, np.ndarray]]
-    rel_beta_period: Iterable[Union[float, np.ndarray]]
+    rel_beta_lockdown: List[Union[float, np.ndarray]]
+    rel_beta_period: List[Union[float, np.ndarray]]
+    cum_periods: Union[float, np.ndarray] = field(init=False)
+
+    def __post_init__(self):
+        assert len(self.rel_beta_period) == len(self.rel_beta_lockdown), \
+            "Mismatched number of relative beta periods to relative lockdown values."
+        self._assert_shapes()
+        self.cum_periods = np.cumsum(self.rel_beta_period, axis=0)
+
+    def _assert_shapes(self, nb_groups: int = None):
+        for k, v in self.__dict__.items():
+            if k == 'nb_samples':
+                continue
+            for i, rel_beta in enumerate(v):
+                self._assert_param_shape(f'{k}[{i}]', rel_beta, nb_groups)
+        return True
 
     @classmethod
     def from_default(cls, nb_samples: int):
         default_cli = LockdownCLI()
-        return cls.samples_from_cli(nb_samples, default_cli)
-
-    def __post_init__(self):
-        self._assert_shapes()
-
-    def _assert_shapes(self, nb_groups: int = None):
-        for k, v in self.__dict__.items():
-            for i, rel_beta in enumerate(v):
-                self._assert_param_shape(f'{k}[{i}]', rel_beta, nb_groups)
-
-        return True
+        return cls.sample_from_cli(default_cli, nb_samples)
 
 
 @dataclass
 class OdeParams(BaseSampleParams):
     r0: Union[float, np.ndarray]
     beta: Union[float, np.ndarray] = field(init=False)
-    rel_beta_postlockdown: Union[float, np.ndarray]
     rel_beta_asymptomatic: Union[float, np.ndarray]
     prop_a: Union[float, np.ndarray]
     prop_m: Union[float, np.ndarray] = field(init=False)
@@ -83,6 +86,8 @@ class OdeParams(BaseSampleParams):
     time_infectious: Union[float, np.ndarray]
     time_s_to_h: Union[float, np.ndarray]
     time_s_to_c: Union[float, np.ndarray]
+    time_rsh_to_h: Union[float, np.ndarray] = field(init=False)
+    time_rsc_to_c: Union[float, np.ndarray] = field(init=False)
     time_h_to_c: Union[float, np.ndarray]
     time_h_to_d: Union[float, np.ndarray]
     time_h_to_r: Union[float, np.ndarray]
@@ -97,6 +102,8 @@ class OdeParams(BaseSampleParams):
         self.prop_s_to_c = 1 - self.prop_s_to_h
         self.prop_h_to_r = 1 - self.prop_h_to_c - self.prop_h_to_d
         self.prop_c_to_r = 1 - self.prop_c_to_d
+        self.time_rsh_to_h = self.time_s_to_h - self.time_infectious
+        self.time_rsc_to_c = self.time_s_to_c - self.time_infectious
         self._assert_shapes()
 
     def _assert_shapes(self, nb_groups: int = None):
@@ -106,5 +113,32 @@ class OdeParams(BaseSampleParams):
 
     @classmethod
     def from_default(cls, nb_samples: int):
-        default_cli = OdeCLI()
-        return cls.samples_from_cli(nb_samples, default_cli)
+        default_cli = OdeParamCLI()
+        return cls.sample_from_cli(default_cli, nb_samples)
+
+
+@dataclass
+class MetaParams:
+
+    nb_samples: int
+    nb_runs: int
+    nb_groups: int
+    ratio_resample: float
+
+    def __post_init__(self):
+        assert self.nb_samples > 0
+        assert self.nb_groups > 0
+        assert self.ratio_resample > 0 and self.ratio_resample <= 1
+
+    @classmethod
+    def from_default(cls):
+        default_cli = MetaVarsCLI()
+        return cls.from_cli(default_cli)
+
+    @classmethod
+    def from_cli(cls, cli: MetaVarsCLI):
+        nb_groups = 9 if cli.age_heterogeneity else 1
+        return cls(nb_samples=cli.nb_samples,
+                   nb_runs=cli.nb_runs,
+                   nb_groups=nb_groups,
+                   ratio_resample=cli.ratio_resample)
