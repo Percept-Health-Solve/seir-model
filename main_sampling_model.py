@@ -74,6 +74,8 @@ parser.add_argument('--mort_loading_range', default=[0.3, 1.1], type=float, narg
 
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
 parser.add_argument('--prop_immune', type=float, default=0)
+parser.add_argument('--hospital_loading_range', type=float, nargs=2, default=[0.9, 1.1],
+                    help='Hospital loading uniform prior range')
 
 
 def main():
@@ -320,16 +322,19 @@ def build_and_solve_model(t_obs,
         beta = r0 / time_infectious
         rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
         rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, (rel_lockdown5_beta+0.2).clip(max=1), size=(nb_samples, 1))
-        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=0.9), size=(nb_samples, 1))
-        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=0.8), size=(nb_samples, 1))
+        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=1), size=(nb_samples, 1))
+        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=1), size=(nb_samples, 1))
         rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.01, (rel_lockdown2_beta+0.1), size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
 
+        hospital_loading = _uniform_from_range(args.hospital_loading_range, size=(nb_samples, 1))
+
         if not args.age_groups:
             # inform variables from the WC experience, not controlling for age
-            prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
+            prop_s_base = 0.043 * hospital_loading
+            prop_m = (1 - prop_a) * (1 - prop_s_base)
             mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
             prop_h_to_c = 6/1238
             prop_h_to_d = mort_loading * 103 / 825
@@ -337,7 +342,9 @@ def build_and_solve_model(t_obs,
         else:
             logging.info('Using 9 age groups, corresponding to 10 year age bands.')
             # from ferguson
-            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])
+            # prop_s_base = np.array([[0.006, 0.003, 0.02, 0.038, 0.06, 0.092, 0.111, 0.148, 0.196]])
+            prop_s_base = np.array([[0.005, 0.0025, 0.0167, 0.0317, 0.0501, 0.0768, 0.0927, 0.1236, 0.1637]])
+            prop_m = (1 - prop_a) * (1 - prop_s_base * hospital_loading)
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
@@ -480,8 +487,14 @@ def build_and_solve_model(t_obs,
     scalar_vars['t0'] = t0
 
     # hack mort loading into plot
-    calc_sample_vars['mort_loading'] = mort_loading
-    calc_resample_vars['mort_loading'] = mort_loading[model.resample_indices]
+    if np.asarray(mort_loading).ndim > 0:
+        calc_sample_vars['mort_loading'] = mort_loading
+        calc_resample_vars['mort_loading'] = mort_loading[model.resample_indices]
+
+    # hack hospital loading into plot
+    if np.asarray(hospital_loading).ndim > 0:
+        calc_sample_vars['hospital_loading'] = hospital_loading
+        calc_resample_vars['hospital_loading'] = hospital_loading[model.resample_indices]
 
     # save model variables
     save_model_variables(model, base=model_base)
