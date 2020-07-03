@@ -5,11 +5,11 @@ from typing import List, Optional, Union
 
 from seir.defaults import (
     NB_SAMPLES_DEFAULT,
+    NB_RUNS_DEFAULT,
     AGE_GROUPS_DEFAULT,
     R0_DEFAULT,
     REL_BETA_LOCKDOWN_DEFAULT,
     REL_BETA_PERIOD_DEFAULT,
-    REL_BETA_POSTLOCKDOWN,
     REL_BETA_ASYMPTOMATIC_DEFAULT,
     PROP_A_DEFAULT,
     PROP_S_DEFAULT,
@@ -35,7 +35,7 @@ def list_field(default=None, metadata=None):
     return field(default_factory=lambda: default, metadata=metadata)
 
 
-def _parse_cli_attr(attr, **kwargs) -> np.ndarray:
+def _sample_cli_attr(attr, **kwargs) -> np.ndarray:
     if len(attr) == 1:
         return np.asarray(attr[0])
     elif len(attr) == 2:
@@ -61,31 +61,8 @@ class DistributionCLI:
             self_vars[k] = self._defaults_dict.get(k, None) if self_vars[k] is None else self_vars[k]
         return True
 
-    def parse_attr(self, attr: str, **kwargs):
+    def sample_attr(self, attr: str, **kwargs):
         raise NotImplementedError
-
-
-@dataclass
-class SampleCLI:
-
-    nb_samples: Optional[int] = field(
-        default=NB_SAMPLES_DEFAULT,
-        metadata={
-            "help": "Number of samples to take for the prior distributions in the ASSA model SIR algorithm."
-        }
-    )
-
-
-@dataclass
-class AgeCLI:
-
-    age_heterogeneity: bool = field(
-        default=AGE_GROUPS_DEFAULT,
-        metadata={
-            "help": "Flag to set the use of population age bands. Bands are in ten years, from 0-9, 10-19, ..., to "
-                    "80+. The age defined attack rates are informed by Ferguson et al. (see References documentation)."
-        }
-    )
 
 
 @dataclass
@@ -117,17 +94,25 @@ class LockdownCLI(DistributionCLI):
         }
     )
 
-    def parse_attr(self, attr: str, **kwargs) -> List[np.ndarray]:
+    def sample_attr(self, attr: str, **kwargs) -> List[np.ndarray]:
         attr_val = getattr(self, attr)
-        return [_parse_cli_attr(x, **kwargs) for x in attr_val]
+        outputs = [_sample_cli_attr(attr_val[0], ** kwargs)]
+        for i in range(1, len(attr_val)):
+            if len(attr_val[i]) == 1:
+                outputs.append(np.asarray(attr_val[i][0]))
+            elif len(attr_val[i]) == 2:
+                if attr_val[i][0] < 0:
+                    outputs.append(np.random.uniform(outputs[i-1] - abs(attr_val[i][0]), attr_val[i][1], **kwargs))
+                else:
+                    outputs.append(np.random.uniform(attr_val[i][0], attr_val[i][1], **kwargs))
+        return outputs
 
 
 @dataclass
-class OdeCLI(DistributionCLI):
+class OdeParamCLI(DistributionCLI):
 
     _defaults_dict = {
         'r0': R0_DEFAULT,
-        'rel_beta_postlockdown': REL_BETA_POSTLOCKDOWN,
         'rel_beta_asymptomatic': REL_BETA_ASYMPTOMATIC_DEFAULT,
         'prop_a': PROP_A_DEFAULT,
         'prop_s': PROP_S_DEFAULT,
@@ -153,14 +138,6 @@ class OdeCLI(DistributionCLI):
         metadata={
             "help": "Basic reproductive number r0. Single input defines a scalar value, two inputs define a "
                     "Uniform prior."
-        }
-    )
-
-    rel_beta_postlockdown: Optional[List[float]] = list_field(
-        default=None,
-        metadata={
-            "help": "Relative beta post all lockdown measures. Used to inform Rt due to behaviour changes introduced "
-                    "by lockdown. Single input defines a scalar value, two inputs define a Uniform prior."
         }
     )
 
@@ -312,7 +289,7 @@ class OdeCLI(DistributionCLI):
         }
     )
 
-    def parse_attr(self, attr: str, **kwargs) -> np.ndarray:
+    def sample_attr(self, attr: str, **kwargs) -> np.ndarray:
         """
         Samples an attribute of the cli to the required scalar or uniform distribution.
         :param attr: Attribute of the CLI to parse.
@@ -326,9 +303,44 @@ class OdeCLI(DistributionCLI):
                 and issubclass(self.__dataclass_fields__[attr].type.__origin__, List)
             ):
                 if self.__dataclass_fields__[attr].metadata.get('action', None) == 'append':
-                    return np.asarray([[_parse_cli_attr(x, **kwargs)] for x in attr_val])
-                return np.asarray(_parse_cli_attr(attr_val, **kwargs))
+                    return np.asarray([[_sample_cli_attr(x, **kwargs)] for x in attr_val])
+                return np.asarray(_sample_cli_attr(attr_val, **kwargs))
             else:
                 return attr_val
         except Exception as e:
             raise ValueError(f"Attribute '{attr}' failed to be parsed. Raised exception '{e}'.")
+
+
+@dataclass
+class MetaVarsCLI:
+
+    nb_samples: Optional[int] = field(
+        default=NB_SAMPLES_DEFAULT,
+        metadata={
+            "help": "Number of samples to take for the prior distributions in the ASSA model SIR algorithm."
+        }
+    )
+
+    nb_runs: Optional[int] = field(
+        default=NB_RUNS_DEFAULT,
+        metadata={
+            "help": "Number of runs to perform. Used when running into memory errors with a large number of samples. "
+                    "Final result will have had nb_samples * nb_runs number of samples for the prior, and "
+                    "ratio_resample * nb_samples * nb_runs number of resamples."
+        }
+    )
+
+    ratio_resample: Optional[int] = field(
+        default=0.05,
+        metadata={
+            "help": "The percentage of resamples to take in the SIR algorithm."
+        }
+    )
+
+    age_heterogeneity: bool = field(
+        default=AGE_GROUPS_DEFAULT,
+        metadata={
+            "help": "Flag to set the use of population age bands. Bands are in ten years, from 0-9, 10-19, ..., to "
+                    "80+. The age defined attack rates are informed by Ferguson et al. (see References documentation)."
+        }
+    )

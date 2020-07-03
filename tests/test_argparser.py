@@ -3,7 +3,7 @@ from typing import Optional, List
 import argparse
 
 from seir.argparser import DataClassArgumentParser
-from seir.cli import OdeCLI
+from seir.cli import OdeParamCLI
 
 
 @dataclass
@@ -122,5 +122,5 @@ def test_accept_list():
 
 
 def test_covid_model_cli_args():
-    parser = DataClassArgumentParser(OdeCLI)
+    parser = DataClassArgumentParser(OdeParamCLI)
     assert parser is not None
