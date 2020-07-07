@@ -69,7 +69,7 @@ parser.add_argument('--contact_k', type=float, default=0.25,
 parser.add_argument('--likelihood', type=str, default='lognormal',
                     help="Method of calculating likehood function. Currently, only supports 'lognormal' and 'poisson'.")
 
-parser.add_argument('--mort_loading_range', default=[0.3, 1.1], type=float, nargs=2,
+parser.add_argument('--mort_loading_range', default=[0.9, 1.1], type=float, nargs=2,
                     help='Mortality loading uniform distribution range')
 
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
