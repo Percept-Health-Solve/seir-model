@@ -84,15 +84,15 @@ class CovidSeirODE(BaseODE):
         infectious_strength = np.sum(self.ode_params.rel_beta_asymptomatic * i_a + i_m + i_s, axis=0, keepdims=True)
 
         if self.ode_params.contact_k > 0:
-            ds_coeff = self.ode_params.contact_k * np.log1p(
+            alpha = self.ode_params.contact_k * np.log1p(
                 self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength
-                / (self.ode_params.contact_k * self.population)
+                / self.ode_params.contact_k
             )
         else:
-            ds_coeff = self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength / self.population
+            alpha = self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength
 
-        ds = - ds_coeff * s
-        de = ds_coeff * s - e / self.ode_params.time_incubate
+        ds = - alpha * s
+        de = alpha * s - e / self.ode_params.time_incubate
         di_a = self.ode_params.prop_a * e / self.ode_params.time_incubate - i_a / self.ode_params.time_infectious
         di_m = self.ode_params.prop_m * e / self.ode_params.time_incubate - i_m / self.ode_params.time_infectious
         di_s = self.ode_params.prop_s * e / self.ode_params.time_incubate - i_s / self.ode_params.time_infectious
