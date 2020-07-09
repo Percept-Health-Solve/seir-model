@@ -23,10 +23,36 @@ class CovidSeirODE(BaseODE):
         assert self.lockdown_params.nb_samples == self.ode_params.nb_samples
         assert self.lockdown_params.nb_samples == self.meta_params.nb_samples
         self._assert_param_age_group()
+        self._assert_valid_params()
 
     def _assert_param_age_group(self):
         self.lockdown_params._assert_shapes(self.meta_params.nb_groups)
         self.ode_params._assert_shapes(self.meta_params.nb_groups)
+
+    def _assert_valid_params(self):
+        assert self.meta_params.nb_samples > 0
+        assert self.meta_params.nb_groups > 0
+        for x in self.lockdown_params.rel_beta_lockdown:
+            assert np.all(x >= 0), \
+                f"Values in 'rel_beta_lockdown' in given lockdown_params are smaller than zero"
+        for x in self.lockdown_params.rel_beta_period:
+            assert np.all(x > 0), \
+                f"Values in 'rel_beta_period' in given lockdown_params are smaller than zero."
+        assert np.all(self.ode_params.r0 > 0), "Values in 'r0' in given ode_params are less than 0"
+        assert np.all(self.ode_params.beta > 0), "Values in 'beta' in given ode_params are less than 0"
+        assert np.all(self.ode_params.rel_beta_asymptomatic > 0), \
+            "Values in 'rel_beta_asymptomatic' in ode_params are smaller than zero"
+        ode_vars = vars(self.ode_params)
+        for k in ode_vars:
+            if 'prop' in k:
+                assert np.all(ode_vars[k] >= 0), \
+                    f"Proportion parameter '{k}' in given ode_params has values smaller than 0"
+                assert np.all(ode_vars[k] <= 1), \
+                    f"Proportion parameter '{k}' in given ode_params has values larger than 1"
+            if 'time' in k:
+                assert np.all(ode_vars[k] > 0), \
+                    f"Given transition time '{k}' in ode_params has values less than or equal to 0."
+
 
     def rel_beta_t_func(self, t):
         if t < 0 or t > self.lockdown_params.cum_periods[-1]:
