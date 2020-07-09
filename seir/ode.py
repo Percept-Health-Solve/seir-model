@@ -118,8 +118,15 @@ class CovidSeirODE(BaseODE):
                          dc_r, dc_d, dr_a, dr_m, dr_h, dr_c, dd_h, dd_c], axis=0)
 
     @classmethod
-    def from_cli(cls, meta_cli: MetaVarsCLI, lockdown_cli: LockdownCLI, ode_cli: OdeParamCLI):
+    def from_default(cls):
+        meta_params = MetaParams.from_default()
+        lockdown_params = LockdownParams.from_default(meta_params.nb_samples)
+        ode_params = OdeParams.from_default(meta_params.nb_samples)
+        return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
+
+    @classmethod
+    def from_cli(cls, meta_cli: MetaCLI, lockdown_cli: LockdownCLI, ode_cli: OdeParamCLI):
         meta_params = MetaParams.from_cli(meta_cli)
-        lockdown_params = LockdownParams.sample_from_cli(lockdown_cli, meta_params.nb_samples)
-        ode_params = OdeParams.sample_from_cli(ode_cli, meta_params.nb_samples)
+        lockdown_params = LockdownParams.from_cli(lockdown_cli, meta_params.nb_samples)
+        ode_params = OdeParams.from_cli(ode_cli, meta_params.nb_samples)
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
