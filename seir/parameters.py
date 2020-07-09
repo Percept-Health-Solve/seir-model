@@ -3,11 +3,23 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Union, Iterable, List
 
-from seir.cli import DistributionCLI, OdeParamCLI, LockdownCLI, MetaVarsCLI
+from seir.cli import DistributionCLI, OdeParamCLI, LockdownCLI, MetaCLI, FittingCLI
 
 
 @dataclass
-class BaseSampleParams:
+class BaseParams:
+
+    @classmethod
+    def from_default(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def from_cli(cls, cli):
+        raise NotImplementedError
+
+
+@dataclass
+class BaseSampleParams(BaseParams):
     nb_samples: int
 
     def _assert_param_shape(self, name, param, nb_groups: int = None):
@@ -24,15 +36,15 @@ class BaseSampleParams:
                 f"Vector in '{name}' should take shape ({nb_groups}, ?) or (1, ?). Got {param.shape} instead."
 
     @classmethod
-    def from_default(cls, nb_samples: int):
+    def from_default(cls, nb_samples: int = 1):
         raise NotImplementedError
 
     @classmethod
-    def sample_from_cli(cls, clis: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int):
-        if isinstance(clis, DistributionCLI):
-            clis = [clis]
+    def from_cli(cls, cli: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int = 1):
+        if isinstance(cli, DistributionCLI):
+            cli = [cli]
         kwargs = {}
-        for cli in clis:
+        for cli in cli:
             cli_attrs = vars(cli).copy()
             for attr in cli_attrs:
                 kwargs[attr] = cli.sample_attr(attr, size=(1, nb_samples))
@@ -62,9 +74,9 @@ class LockdownParams(BaseSampleParams):
         return True
 
     @classmethod
-    def from_default(cls, nb_samples: int):
+    def from_default(cls, nb_samples: int = 1):
         default_cli = LockdownCLI()
-        return cls.sample_from_cli(default_cli, nb_samples)
+        return cls.from_cli(default_cli, nb_samples)
 
 
 @dataclass
@@ -110,35 +122,44 @@ class OdeParams(BaseSampleParams):
         for k, v in self.__dict__.items():
             self._assert_param_shape(k, v, nb_groups)
 
-
     @classmethod
-    def from_default(cls, nb_samples: int):
+    def from_default(cls, nb_samples: int = 1):
         default_cli = OdeParamCLI()
-        return cls.sample_from_cli(default_cli, nb_samples)
+        return cls.from_cli(default_cli, nb_samples)
 
 
 @dataclass
-class MetaParams:
+class MetaParams(BaseParams):
 
     nb_samples: int
-    nb_runs: int
     nb_groups: int
-    ratio_resample: float
-
-    def __post_init__(self):
-        assert self.nb_samples > 0
-        assert self.nb_groups > 0
-        assert self.ratio_resample > 0 and self.ratio_resample <= 1
 
     @classmethod
     def from_default(cls):
-        default_cli = MetaVarsCLI()
+        default_cli = MetaCLI()
         return cls.from_cli(default_cli)
 
     @classmethod
-    def from_cli(cls, cli: MetaVarsCLI):
+    def from_cli(cls, cli: MetaCLI):
         nb_groups = 9 if cli.age_heterogeneity else 1
         return cls(nb_samples=cli.nb_samples,
-                   nb_runs=cli.nb_runs,
-                   nb_groups=nb_groups,
-                   ratio_resample=cli.ratio_resample)
+                   nb_groups=nb_groups)
+
+
+@dataclass
+class FittingParams(BaseParams):
+
+    nb_runs: int
+    ratio_resample: int
+
+    @classmethod
+    def from_default(cls):
+        default_cli = FittingCLI()
+        return cls.from_cli(default_cli)
+
+    @classmethod
+    def from_cli(cls, cli: FittingCLI):
+        return cls(
+            nb_runs=cli.nb_runs,
+            ratio_resample=cli.ratio_resample
+        )
