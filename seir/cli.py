@@ -312,7 +312,7 @@ class OdeParamCLI(DistributionCLI):
 
 
 @dataclass
-class MetaVarsCLI:
+class MetaCLI:
 
     nb_samples: Optional[int] = field(
         default=NB_SAMPLES_DEFAULT,
@@ -320,6 +320,18 @@ class MetaVarsCLI:
             "help": "Number of samples to take for the prior distributions in the ASSA model SIR algorithm."
         }
     )
+
+    age_heterogeneity: bool = field(
+        default=AGE_GROUPS_DEFAULT,
+        metadata={
+            "help": "Flag to set the use of population age bands. Bands are in ten years, from 0-9, 10-19, ..., to "
+                    "80+. The age defined attack rates are informed by Ferguson et al. (see References documentation)."
+        }
+    )
+
+
+@dataclass
+class FittingCLI:
 
     nb_runs: Optional[int] = field(
         default=NB_RUNS_DEFAULT,
@@ -334,13 +346,5 @@ class MetaVarsCLI:
         default=0.05,
         metadata={
             "help": "The percentage of resamples to take in the SIR algorithm."
-        }
-    )
-
-    age_heterogeneity: bool = field(
-        default=AGE_GROUPS_DEFAULT,
-        metadata={
-            "help": "Flag to set the use of population age bands. Bands are in ten years, from 0-9, 10-19, ..., to "
-                    "80+. The age defined attack rates are informed by Ferguson et al. (see References documentation)."
         }
     )
