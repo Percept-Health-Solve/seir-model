@@ -57,7 +57,8 @@ Parameters beginning with `--` are parser arguments in the script, i.e. can be s
 
 *Notes: finalise scenarios; model structure changes to be considered for post-lockdown period with variable relative betas*
 
-* ```--contact_k``` is the value of `k` in the Kong et al. method, 0.25 by default; scenario values to be determined
+* `--contact_heterogeneous` sets the model to a susceptible contact heterogeneous model as per Kong et. al.
+* ```--contact_k``` is the value of `k` in the Kong et al. method, 0.25 by default; scenario values to be determined, must set `--contact_heterogeneous` for this to take effect
 * `rel_lockdown4_beta`: infectious spread post Level 5 relative to baseline, 0.8 by default; scenario values to be determined
 * `rel_lockdown3_beta`, `rel_lockdown3_beta`, `rel_lockdown2_beta`, `rel_postlockdown_beta` = (0.6, 0.6, 0.7, 0.8) by default; scenarios to be determined
 * ```prop_as_range``` is the range of values which can be taken by the assumed proportion asymptomatic; at present we are making this deterministic per scenario with a base assumption of 0.5 (achieved by setting the upper and lower bounds to 0.5), pending data from the WCDoH, with other scenario values to be determined.
@@ -71,15 +72,15 @@ Age-banded table:
 
 |   Age  | `prop_m` | `prop_h_to_c` | `prop_h_to_d` | `prop_c_to_d` |
 |:------:|---------:|--------------:|--------------:|--------------:|
-|   0-9  |    0.999 |          1/81 |         0.011 |         0.011 |
-| 10-19  |    0.997 |          1/81 |         0.042 |         0.042 |
-| 20-29  |    0.988 |          1/81 |         0.045 |         0.410 |
-| 30-39  |    0.968 |         7/184 |         0.063 |         0.540 |
-| 40-49  |    0.951 |        32/200 |         0.096 |         0.590 |
-| 50-59  |    0.898 |        38/193 |         0.245 |         0.650 |
-| 60-69  |    0.834 |        24/129 |         0.408 |         0.660 |
-| 70-79  |    0.757 |         10/88 |         0.448 |         0.670 |
-|   80+  |    0.727 |          5/31 |         0.526 |         0.710 |
+|   0-9  |    0.9950 |          1/81 |         0.011 |         0.011 |
+| 10-19  |    0.9975 |          1/81 |         0.042 |         0.042 |
+| 20-29  |    0.9833 |          1/81 |         0.045 |         0.410 |
+| 30-39  |    0.9683 |         7/184 |         0.063 |         0.540 |
+| 40-49  |    0.9499 |        32/200 |         0.096 |         0.590 |
+| 50-59  |    0.9232 |        38/193 |         0.245 |         0.650 |
+| 60-69  |    0.9073 |        24/129 |         0.408 |         0.660 |
+| 70-79  |    0.8764 |         10/88 |         0.448 |         0.670 |
+|   80+  |    0.8363 |          5/31 |         0.526 |         0.710 |
 
 
 ### Variable parameters
@@ -91,7 +92,8 @@ Age-banded table:
 * `rel_lockdown5_beta` (upper and lower bounds from `--rel_lockdown5_beta_range`): rate of infectious spread in Level 5 lockdown compared to baseline $\sim U(0.4,1)$
 * `rel_beta_as` (upper and lower bounds from `--rel_beta_as_range`): relative infectiousness of asymptomatic cases $\sim U(0.3,1)$
 * `e0` (upper and lower bounds from `--e0_range`): proportion of initial population at `t0` that is exposed $\sim U(0,10^{-5})$
-* `mort_loading`: applies a loading to the age-banded mortality rates (`prop_*_to_d` in the table above) $\sim U(0.8,1.2)$
+* `mort_loading`: applies a loading to the age-banded mortality rates (`prop_*_to_d` in the table above) $\sim U(0.9,1.1)$
+* `hospital_loading`: applies to the number of number of cases expected to present to hospital (1-`prop_m` above) $\sim U(0.9, 1.1)$
 
 
 
