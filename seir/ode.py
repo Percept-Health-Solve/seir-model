@@ -1,10 +1,9 @@
 import numpy as np
 
-from dataclasses import dataclass, field
-from typing import Union
+from dataclasses import dataclass
 
-from seir.cli import MetaVarsCLI, LockdownCLI, OdeParamCLI
-from seir.ode_parameters import MetaParams, LockdownParams, OdeParams
+from seir.cli import MetaCLI, LockdownCLI, OdeParamCLI
+from seir.parameters import MetaParams, LockdownParams, OdeParams
 
 
 class BaseODE:
