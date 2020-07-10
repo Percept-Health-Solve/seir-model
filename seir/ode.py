@@ -19,6 +19,16 @@ class CovidSeirODE(BaseODE):
     lockdown_params: LockdownParams
     ode_params: OdeParams
 
+    nb_states = 18
+
+    @property
+    def nb_samples(self) -> int:
+        return self.meta_params.nb_samples
+
+    @property
+    def nb_groups(self) -> int:
+        return self.meta_params.nb_groups
+
     def __post_init__(self):
         assert self.lockdown_params.nb_samples == self.ode_params.nb_samples
         assert self.lockdown_params.nb_samples == self.meta_params.nb_samples
@@ -53,7 +63,6 @@ class CovidSeirODE(BaseODE):
                 assert np.all(ode_vars[k] > 0), \
                     f"Given transition time '{k}' in ode_params has values less than or equal to 0."
 
-
     def rel_beta_t_func(self, t):
         if t < 0 or t > self.lockdown_params.cum_periods[-1]:
             return 1
@@ -61,7 +70,10 @@ class CovidSeirODE(BaseODE):
             return self.lockdown_params.rel_beta_lockdown[np.argmin(self.lockdown_params.cum_periods < t)]
 
     def __call__(self, y, t):
-        # shape should be y[states, groups, samples]
+        y = np.asarray(y)
+        assert y.shape == (self.nb_states, self.meta_params.nb_groups, self.meta_params.nb_samples), \
+            f"Given y to ode does not match intended shape. Should have shape ({self.nb_states}, " \
+            f"{self.meta_params.nb_groups}, {self.meta_params.nb_samples}), got {y.shape} instead."
         s = y[0]
         e = y[1]
         i_a = y[2]
@@ -82,14 +94,15 @@ class CovidSeirODE(BaseODE):
         # d_c = y[17]
 
         infectious_strength = np.sum(self.ode_params.rel_beta_asymptomatic * i_a + i_m + i_s, axis=0, keepdims=True)
+        n = np.sum(y, axis=0)
 
         if self.ode_params.contact_k > 0:
             alpha = self.ode_params.contact_k * np.log1p(
                 self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength
-                / self.ode_params.contact_k
+                / (n * self.ode_params.contact_k)
             )
         else:
-            alpha = self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength
+            alpha = self.rel_beta_t_func(t) * self.ode_params.beta * infectious_strength / n
 
         ds = - alpha * s
         de = alpha * s - e / self.ode_params.time_incubate
@@ -110,18 +123,21 @@ class CovidSeirODE(BaseODE):
         dr_a = i_a / self.ode_params.time_infectious
         dr_m = i_m / self.ode_params.time_infectious
         dr_h = h_r / self.ode_params.time_h_to_r
-        dr_c = c_d / self.ode_params.time_c_to_d
+        dr_c = c_r / self.ode_params.time_c_to_r
         dd_h = h_d / self.ode_params.time_h_to_d
         dd_c = c_d / self.ode_params.time_c_to_d
 
-        return np.stack([ds, de, di_a, di_m, di_s, dr_sh, dr_sc, dh_r, dh_c, dh_d,
-                         dc_r, dc_d, dr_a, dr_m, dr_h, dr_c, dd_h, dd_c], axis=0)
+        dydt = [ds, de, di_a, di_m, di_s, dr_sh, dr_sc, dh_r, dh_c,
+                dh_d, dc_r, dc_d, dr_a, dr_m, dr_h, dr_c, dd_h, dd_c]
+        dydt = [np.asarray(dy) for dy in dydt]
+
+        return np.stack(dydt)
 
     @classmethod
     def from_default(cls):
         meta_params = MetaParams.from_default()
-        lockdown_params = LockdownParams.from_default(meta_params.nb_samples)
-        ode_params = OdeParams.from_default(meta_params.nb_samples)
+        lockdown_params = LockdownParams.from_default()
+        ode_params = OdeParams.from_default()
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
 
     @classmethod
