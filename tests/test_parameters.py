@@ -44,7 +44,7 @@ def test_from_cli():
 def test_lockdown_params():
     nb_samples_list = [1, 10, 100]
     for nb_samples in nb_samples_list:
-        rel_beta_lockdown = [0.8, 0.9, np.random.uniform(0, 1, size=(nb_samples, 1))]
+        rel_beta_lockdown = [0.8, 0.9, np.random.uniform(0, 1, size=(1, nb_samples))]
         rel_beta_period = [10, 20, 30]
         lockdown_params = LockdownParams(nb_samples, rel_beta_lockdown, rel_beta_period)
         assert lockdown_params is not None
@@ -60,24 +60,24 @@ def test_ode_params():
         kwargs = {
             'nb_samples': nb_samples,
             'r0': 2.5,
-            'rel_beta_asymptomatic': np.random.uniform(0, 2.5, size=(nb_samples, 1)),
-            'prop_a': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'prop_s': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'prop_s_to_h': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'prop_h_to_c': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'prop_h_to_d': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'prop_c_to_d': np.random.uniform(0, 1, size=(nb_samples, 1)),
-            'time_incubate': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_infectious': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_s_to_h': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_s_to_c': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_h_to_c': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_h_to_d': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_h_to_r': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_c_to_d': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'time_c_to_r': np.random.uniform(1, 2, size=(nb_samples, 1)),
-            'contact_k': np.random.uniform(0, 2, size=(nb_samples, 1)),
-            'prop_e0': np.random.uniform(0, 1, size=(nb_samples, 1)),
+            'rel_beta_asymptomatic': np.random.uniform(0, 2.5, size=(1, nb_samples)),
+            'prop_a': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'prop_s': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'prop_s_to_h': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'prop_h_to_c': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'prop_h_to_d': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'prop_c_to_d': np.random.uniform(0, 1, size=(1, nb_samples)),
+            'time_incubate': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_infectious': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_s_to_h': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_s_to_c': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_h_to_c': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_h_to_d': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_h_to_r': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_c_to_d': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'time_c_to_r': np.random.uniform(1, 2, size=(1, nb_samples)),
+            'contact_k': np.random.uniform(0, 2, size=(1, nb_samples)),
+            'prop_e0': np.random.uniform(0, 1, size=(1, nb_samples)),
         }
 
         ode_params = OdeParams(**kwargs)
