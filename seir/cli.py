@@ -1,7 +1,7 @@
 import numpy as np
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from seir.defaults import (
     NB_SAMPLES_DEFAULT,
@@ -73,7 +73,7 @@ class LockdownCLI(DistributionCLI):
         'rel_beta_period': REL_BETA_PERIOD_DEFAULT
     }
 
-    rel_beta_lockdown: Optional[List[float]] = list_field(
+    rel_beta_lockdown: List[float] = list_field(
         default=None,
         metadata={
             "help": "Bounds of relative beta uniform prior distributions corresponding to relative beta "
@@ -84,7 +84,7 @@ class LockdownCLI(DistributionCLI):
         }
     )
 
-    rel_beta_period: Optional[List[float]] = list_field(
+    rel_beta_period: List[float] = list_field(
         default=None,
         metadata={
             "help": "Length of each period for which the relative beta's apply, in days, after the start of lockdown."
@@ -133,7 +133,7 @@ class OdeParamCLI(DistributionCLI):
         'prop_e0': PROP_E0_DEFAULT
     }
 
-    r0: Optional[List[float]] = list_field(
+    r0: List[float] = list_field(
         default=None,
         metadata={
             "help": "Basic reproductive number r0. Single input defines a scalar value, two inputs define a "
@@ -141,7 +141,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    rel_beta_asymptomatic: Optional[List[float]] = list_field(
+    rel_beta_asymptomatic: List[float] = list_field(
         default=None,
         metadata={
             "help": "The relative infectivity strength of asymptomatic cases. Single input defines a scalar value, two"
@@ -149,7 +149,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_a: Optional[List[float]] = list_field(
+    prop_a: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportion of asymptomatic infected individuals. Single input defines a scalar, two inputs define "
@@ -157,7 +157,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_s: Optional[List[float]] = list_field(
+    prop_s: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportion of symptomatic individuals (1 - prop_a) that experience severe symptoms. Defaults to "
@@ -166,7 +166,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_s_to_h: Optional[List[float]] = list_field(
+    prop_s_to_h: List[float] = list_field(
         default=None,
         metadata={
             "help": "Propotion of severe cases that will be admitted to general hospital. The rest will present "
@@ -175,7 +175,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_h_to_c: Optional[List[float]] = list_field(
+    prop_h_to_c: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportion of general hospital cases expected to be transferred to critical care. Defaults to "
@@ -184,7 +184,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_h_to_d: Optional[List[float]] = list_field(
+    prop_h_to_d: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportion of general hospital cases that are expected to die. Defaults to calculations based off "
@@ -193,7 +193,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_c_to_d: Optional[List[float]] = list_field(
+    prop_c_to_d: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportions of critical care cases that are expected to die. Defaults to calculations based off "
@@ -202,7 +202,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_incubate: Optional[List[float]] = list_field(
+    time_incubate: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days of disease incubation. Defaults to 5.1. Single attr defines a scalar, two inputs define a "
@@ -210,14 +210,14 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_infectious: Optional[List[float]] = list_field(
+    time_infectious: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days that infectious individuals can spread the virus."
         }
     )
 
-    time_s_to_h: Optional[List[float]] = list_field(
+    time_s_to_h: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from onset of symptoms to hospital admission for severe cases. Defaults to 6. Single input "
@@ -225,7 +225,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_s_to_c: Optional[List[float]] = list_field(
+    time_s_to_c: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from onset of symptoms to critcal care admission for severe cases. Defaults to 6. Single "
@@ -233,7 +233,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_h_to_c: Optional[List[float]] = list_field(
+    time_h_to_c: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from admission of general hospital to critical care, for those that will require it. "
@@ -241,7 +241,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_h_to_r: Optional[List[float]] = list_field(
+    time_h_to_r: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from general hospital admission to recovery, for those that will recover. Defaults to "
@@ -249,7 +249,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_h_to_d: Optional[List[float]] = list_field(
+    time_h_to_d: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from general hospital admission to death, for those that will die. Defaults to calculations "
@@ -257,7 +257,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_c_to_r: Optional[List[float]] = list_field(
+    time_c_to_r: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from critical care admission to recovery, for those that will recover. Defaults to "
@@ -265,7 +265,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    time_c_to_d: Optional[List[float]] = list_field(
+    time_c_to_d: List[float] = list_field(
         default=None,
         metadata={
             "help": "Days from critical care admission to death, for those that will die. Defaults to "
@@ -273,7 +273,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    contact_k: Optional[List[float]] = list_field(
+    contact_k: List[float] = list_field(
         default=None,
         metadata={
             "help": "Contact heterogeneity factor from Kong et. al. (see References documentation). Defaults to None, "
@@ -281,7 +281,7 @@ class OdeParamCLI(DistributionCLI):
         }
     )
 
-    prop_e0: Optional[List[float]] = list_field(
+    prop_e0: List[float] = list_field(
         default=None,
         metadata={
             "help": "Proportion of starting population in the exposed category. Used to seed the SEIR model. Defaults "
@@ -305,8 +305,7 @@ class OdeParamCLI(DistributionCLI):
                 if self.__dataclass_fields__[attr].metadata.get('action', None) == 'append':
                     return np.asarray([[_sample_cli_attr(x, **kwargs)] for x in attr_val])
                 return np.asarray(_sample_cli_attr(attr_val, **kwargs))
-            else:
-                return attr_val
+            return attr_val
         except Exception as e:
             raise ValueError(f"Attribute '{attr}' failed to be parsed. Raised exception '{e}'.")
 

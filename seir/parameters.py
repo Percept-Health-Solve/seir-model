@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Union, Iterable, List
 
 from seir.cli import DistributionCLI, OdeParamCLI, LockdownCLI, MetaCLI, FittingCLI
+from seir.defaults import NB_SAMPLES_DEFAULT
 
 
 @dataclass
@@ -36,11 +37,7 @@ class BaseSampleParams(BaseParams):
                 f"Vector in '{name}' should take shape ({nb_groups}, ?) or (1, ?). Got {param.shape} instead."
 
     @classmethod
-    def from_default(cls, nb_samples: int = 1):
-        raise NotImplementedError
-
-    @classmethod
-    def from_cli(cls, cli: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int = 1):
+    def from_cli(cls, cli: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int = NB_SAMPLES_DEFAULT):
         if isinstance(cli, DistributionCLI):
             cli = [cli]
         kwargs = {}
@@ -74,9 +71,9 @@ class LockdownParams(BaseSampleParams):
         return True
 
     @classmethod
-    def from_default(cls, nb_samples: int = 1):
+    def from_default(cls):
         default_cli = LockdownCLI()
-        return cls.from_cli(default_cli, nb_samples)
+        return cls.from_cli(default_cli)
 
 
 @dataclass
@@ -123,9 +120,9 @@ class OdeParams(BaseSampleParams):
             self._assert_param_shape(k, v, nb_groups)
 
     @classmethod
-    def from_default(cls, nb_samples: int = 1):
+    def from_default(cls):
         default_cli = OdeParamCLI()
-        return cls.from_cli(default_cli, nb_samples)
+        return cls.from_cli(default_cli)
 
 
 @dataclass
