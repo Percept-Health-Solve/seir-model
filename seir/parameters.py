@@ -15,7 +15,7 @@ class BaseParams:
         raise NotImplementedError
 
     @classmethod
-    def sample_from_cli(cls, cli):
+    def from_cli(cls, cli):
         raise NotImplementedError
 
 
@@ -37,6 +37,10 @@ class BaseSampleParams(BaseParams):
                 f"Vector in '{name}' should take shape ({nb_groups}, ?) or (1, ?). Got {param.shape} instead."
 
     @classmethod
+    def from_cli(cls, cli, nb_samples: int = NB_SAMPLES_DEFAULT):
+        return cls.sample_from_cli(cli, nb_samples)
+
+    @classmethod
     def sample_from_cli(cls,
                         cli: Union[BaseDistributionCLI, Iterable[BaseDistributionCLI]],
                         nb_samples: int = NB_SAMPLES_DEFAULT):
@@ -46,13 +50,13 @@ class BaseSampleParams(BaseParams):
         for cli in cli:
             cli_attrs = vars(cli).copy()
             for attr in cli_attrs:
-                kwargs[attr] = cli.sample_attr(attr, size=(1, nb_samples))
+                kwargs[attr] = cli.sample_attr(attr, nb_samples=nb_samples)
         kwargs['nb_samples'] = nb_samples
         return cls(**kwargs)
 
 
 @dataclass
-class LockdownParams(BaseSampleParams):
+class SampleLockdownParams(BaseSampleParams):
 
     rel_beta_lockdown: List[Union[float, np.ndarray]]
     rel_beta_period: List[Union[float, np.ndarray]]
@@ -79,7 +83,7 @@ class LockdownParams(BaseSampleParams):
 
 
 @dataclass
-class OdeParams(BaseSampleParams):
+class SampleOdeParams(BaseSampleParams):
     r0: Union[float, np.ndarray]
     beta: Union[float, np.ndarray] = field(init=False)
     rel_beta_asymptomatic: Union[float, np.ndarray]
@@ -105,7 +109,6 @@ class OdeParams(BaseSampleParams):
     time_c_to_d: Union[float, np.ndarray]
     time_c_to_r: Union[float, np.ndarray]
     contact_k: Union[float, np.ndarray]
-    prop_e0: Union[float, np.ndarray]
 
     def __post_init__(self):
         self.beta = self.r0 / self.time_infectious
@@ -136,10 +139,10 @@ class MetaParams(BaseParams):
     @classmethod
     def from_default(cls):
         default_cli = MetaCLI()
-        return cls.sample_from_cli(default_cli)
+        return cls.from_cli(default_cli)
 
     @classmethod
-    def sample_from_cli(cls, cli: MetaCLI):
+    def from_cli(cls, cli: MetaCLI):
         nb_groups = 9 if cli.age_heterogeneity else 1
         return cls(nb_samples=cli.nb_samples,
                    nb_groups=nb_groups)
@@ -156,14 +159,16 @@ class FittingParams(BaseParams):
     fit_infected: bool = False
     fit_hospitalised: bool = False
     fit_critical: bool = False
+    fit_daily: bool = False
+    fit_interval: int = 1
 
     @classmethod
     def from_default(cls):
         default_cli = FittingCLI()
-        return cls.sample_from_cli(default_cli)
+        return cls.from_cli(default_cli)
 
     @classmethod
-    def sample_from_cli(cls, cli: FittingCLI):
+    def from_cli(cls, cli: FittingCLI):
         return cls(
             nb_runs=cli.nb_runs,
             ratio_resample=cli.ratio_resample,
@@ -172,5 +177,7 @@ class FittingParams(BaseParams):
             fit_recovered=cli.fit_recovered,
             fit_infected=cli.fit_infected,
             fit_hospitalised=cli.fit_hospitalised,
-            fit_critical=cli.fit_critical
+            fit_critical=cli.fit_critical,
+            fit_daily=cli.fit_daily,
+            fit_interval=cli.fit_interval
         )

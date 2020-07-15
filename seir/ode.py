@@ -3,7 +3,7 @@ import numpy as np
 from dataclasses import dataclass, field
 
 from seir.cli import MetaCLI, LockdownCLI, OdeParamCLI
-from seir.parameters import BaseParams, MetaParams, LockdownParams, OdeParams
+from seir.parameters import BaseParams, MetaParams, SampleLockdownParams, SampleOdeParams
 
 
 class BaseODE:
@@ -37,8 +37,8 @@ class BaseODE:
 class CovidSeirODE(BaseODE):
 
     meta_params: MetaParams
-    lockdown_params: LockdownParams
-    ode_params: OdeParams
+    lockdown_params: SampleLockdownParams
+    ode_params: SampleOdeParams
     params: dict = field(init=False)
 
     nb_states = 18
@@ -161,22 +161,16 @@ class CovidSeirODE(BaseODE):
 
         return np.stack(dydt)
 
-    def create_y0(self):
-        y0 = np.zeros((self.nb_states, self.nb_groups, self.nb_samples))
-        y0[1, :, :] = self.ode_params.prop_e0
-        y0[0, :, :] = 1 - self.ode_params.prop_e0
-        return y0
-
     @classmethod
     def from_default(cls):
         meta_params = MetaParams.from_default()
-        lockdown_params = LockdownParams.from_default()
-        ode_params = OdeParams.from_default()
+        lockdown_params = SampleLockdownParams.from_default()
+        ode_params = SampleOdeParams.from_default()
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
 
     @classmethod
     def sample_from_cli(cls, meta_cli: MetaCLI, lockdown_cli: LockdownCLI, ode_cli: OdeParamCLI):
-        meta_params = MetaParams.sample_from_cli(meta_cli)
-        lockdown_params = LockdownParams.sample_from_cli(lockdown_cli, meta_params.nb_samples)
-        ode_params = OdeParams.sample_from_cli(ode_cli, meta_params.nb_samples)
+        meta_params = MetaParams.from_cli(meta_cli)
+        lockdown_params = SampleLockdownParams.sample_from_cli(lockdown_cli, meta_params.nb_samples)
+        ode_params = SampleOdeParams.sample_from_cli(ode_cli, meta_params.nb_samples)
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
