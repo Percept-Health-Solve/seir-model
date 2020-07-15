@@ -1,11 +1,11 @@
 import numpy as np
-from seir.parameters import LockdownParams, OdeParams, MetaParams, FittingParams, BaseParams
+from seir.parameters import SampleLockdownParams, SampleOdeParams, MetaParams, FittingParams, BaseParams
 from seir.cli import LockdownCLI, OdeParamCLI, MetaCLI, FittingCLI
 
 
 param_classes = [
-    LockdownParams,
-    OdeParams,
+    SampleLockdownParams,
+    SampleOdeParams,
     MetaParams,
     FittingParams
 ]
@@ -37,7 +37,7 @@ def test_from_default():
 def test_from_cli():
     for param_class, cli_class in zip(param_classes, cli_classes):
         cli_ins = cli_class()
-        param_ins = param_class.sample_from_cli(cli_ins)
+        param_ins = param_class.from_cli(cli_ins)
         assert param_ins is not None
 
 
@@ -46,7 +46,7 @@ def test_lockdown_params():
     for nb_samples in nb_samples_list:
         rel_beta_lockdown = [0.8, 0.9, np.random.uniform(0, 1, size=(1, nb_samples))]
         rel_beta_period = [10, 20, 30]
-        lockdown_params = LockdownParams(nb_samples, rel_beta_lockdown, rel_beta_period)
+        lockdown_params = SampleLockdownParams(nb_samples, rel_beta_lockdown, rel_beta_period)
         assert lockdown_params is not None
         assert lockdown_params.nb_samples == nb_samples
         assert lockdown_params.rel_beta_lockdown == rel_beta_lockdown
@@ -77,10 +77,9 @@ def test_ode_params():
             'time_c_to_d': np.random.uniform(1, 2, size=(1, nb_samples)),
             'time_c_to_r': np.random.uniform(1, 2, size=(1, nb_samples)),
             'contact_k': np.random.uniform(0, 2, size=(1, nb_samples)),
-            'prop_e0': np.random.uniform(0, 1, size=(1, nb_samples)),
         }
 
-        ode_params = OdeParams(**kwargs)
+        ode_params = SampleOdeParams(**kwargs)
 
         kwargs['beta'] = kwargs['r0'] / kwargs['time_infectious']
         kwargs['prop_m'] = 1 - kwargs['prop_a'] - kwargs['prop_s']
