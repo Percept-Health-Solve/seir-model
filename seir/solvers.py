@@ -17,11 +17,8 @@ class ScipyOdeIntSolver:
     _solved_y0: Union[List, np.ndarray] = field(default=None, init=False)
     _solution: CovidData = field(default=None, init=False)
 
-    def solve(self, t, y0=None, return_full: bool = True, sol_multiplier: float = 1) -> Union[CovidData, Tuple[CovidData, np.ndarray]]:
-        if y0 is None:
-            y0 = self.ode.create_y0()
-        else:
-            y0 = np.asarray(y0)
+    def solve(self, y0, t, return_full: bool = True, sol_multiplier: float = 1) -> Union[CovidData, Tuple[CovidData, np.ndarray]]:
+        y0 = np.asarray(y0)
         t = np.asarray(t)
 
         def _ode_wrap(y, t):
