@@ -1,7 +1,9 @@
 import numpy as np
+import json
 
-from dataclasses import dataclass, field
-from typing import List, Optional
+from pathlib import Path
+from dataclasses import dataclass, field, asdict
+from typing import List, Optional, Union
 
 from seir.defaults import (
     NB_SAMPLES_DEFAULT,
@@ -45,7 +47,15 @@ def _sample_cli_attr(attr, **kwargs) -> np.ndarray:
                          f"number of parameters instead.")
 
 
-class DistributionCLI:
+class BaseCLI:
+
+    def save_to_json(self, path: Union[str, Path]):
+        if not isinstance(path, Path):
+            path = Path(path)
+        # TODO: flesh this out
+
+
+class BaseDistributionCLI(BaseCLI):
 
     _defaults_dict = {}
 
@@ -66,7 +76,7 @@ class DistributionCLI:
 
 
 @dataclass
-class LockdownCLI(DistributionCLI):
+class LockdownCLI(BaseDistributionCLI):
 
     _defaults_dict = {
         'rel_beta_lockdown': REL_BETA_LOCKDOWN_DEFAULT,
@@ -109,7 +119,7 @@ class LockdownCLI(DistributionCLI):
 
 
 @dataclass
-class OdeParamCLI(DistributionCLI):
+class OdeParamCLI(BaseDistributionCLI):
 
     _defaults_dict = {
         'r0': R0_DEFAULT,
@@ -292,9 +302,8 @@ class OdeParamCLI(DistributionCLI):
     def sample_attr(self, attr: str, **kwargs) -> np.ndarray:
         """
         Samples an attribute of the cli to the required scalar or uniform distribution.
-        :param attr: Attribute of the CLI to parse.
-        :return parsed_attr: Returns the appropriate sampled argument. Either a scalar, a set of samples of size
-            (1, nb_samples) or list of samples of size (1, nb_samples)
+        :value attr: Attribute of the CLI to parse.
+        :return parsed_attr: Returns the appropriate sampled argument.
         """
         attr_val = getattr(self, attr)
         try:
@@ -311,7 +320,7 @@ class OdeParamCLI(DistributionCLI):
 
 
 @dataclass
-class MetaCLI:
+class MetaCLI(BaseCLI):
 
     nb_samples: Optional[int] = field(
         default=NB_SAMPLES_DEFAULT,
@@ -330,7 +339,7 @@ class MetaCLI:
 
 
 @dataclass
-class FittingCLI:
+class FittingCLI(BaseCLI):
 
     nb_runs: Optional[int] = field(
         default=NB_RUNS_DEFAULT,
@@ -345,5 +354,48 @@ class FittingCLI:
         default=0.05,
         metadata={
             "help": "The percentage of resamples to take in the SIR algorithm."
+        }
+    )
+
+    fit_totals: bool = field(
+        default=True,
+        metadata={
+            "help": "Fit data to the sub totals of all population groups. Useful when the data does not contain "
+                    "population group differences (as in, for example, the DSFSI data."
+        }
+    )
+
+    fit_deaths: bool = field(
+        default=False,
+        metadata={
+            "help": "Fits model to death data, if available."
+        }
+    )
+
+    fit_recovered: bool = field(
+        default=False,
+        metadata={
+            "help": "Fits model to recovered data, if available."
+        }
+    )
+
+    fit_infected: bool = field(
+        default=False,
+        metadata={
+            "help": "Fits model to infected cases, if available."
+        }
+    )
+
+    fit_hospitalised: bool = field(
+        default=False,
+        metadata={
+            "help": "Fits model to hospital data, if available."
+        }
+    )
+
+    fit_critical: bool = field(
+        default=False,
+        metadata={
+            "help": "Fits model to ICU data, if available."
         }
     )
