@@ -3,7 +3,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Union, Iterable, List
 
-from seir.cli import DistributionCLI, OdeParamCLI, LockdownCLI, MetaCLI, FittingCLI
+from seir.cli import BaseDistributionCLI, OdeParamCLI, LockdownCLI, MetaCLI, FittingCLI
 from seir.defaults import NB_SAMPLES_DEFAULT
 
 
@@ -15,7 +15,7 @@ class BaseParams:
         raise NotImplementedError
 
     @classmethod
-    def from_cli(cls, cli):
+    def sample_from_cli(cls, cli):
         raise NotImplementedError
 
 
@@ -37,8 +37,10 @@ class BaseSampleParams(BaseParams):
                 f"Vector in '{name}' should take shape ({nb_groups}, ?) or (1, ?). Got {param.shape} instead."
 
     @classmethod
-    def from_cli(cls, cli: Union[DistributionCLI, Iterable[DistributionCLI]], nb_samples: int = NB_SAMPLES_DEFAULT):
-        if isinstance(cli, DistributionCLI):
+    def sample_from_cli(cls,
+                        cli: Union[BaseDistributionCLI, Iterable[BaseDistributionCLI]],
+                        nb_samples: int = NB_SAMPLES_DEFAULT):
+        if isinstance(cli, BaseDistributionCLI):
             cli = [cli]
         kwargs = {}
         for cli in cli:
@@ -73,7 +75,7 @@ class LockdownParams(BaseSampleParams):
     @classmethod
     def from_default(cls):
         default_cli = LockdownCLI()
-        return cls.from_cli(default_cli)
+        return cls.sample_from_cli(default_cli)
 
 
 @dataclass
@@ -122,7 +124,7 @@ class OdeParams(BaseSampleParams):
     @classmethod
     def from_default(cls):
         default_cli = OdeParamCLI()
-        return cls.from_cli(default_cli)
+        return cls.sample_from_cli(default_cli)
 
 
 @dataclass
@@ -134,10 +136,10 @@ class MetaParams(BaseParams):
     @classmethod
     def from_default(cls):
         default_cli = MetaCLI()
-        return cls.from_cli(default_cli)
+        return cls.sample_from_cli(default_cli)
 
     @classmethod
-    def from_cli(cls, cli: MetaCLI):
+    def sample_from_cli(cls, cli: MetaCLI):
         nb_groups = 9 if cli.age_heterogeneity else 1
         return cls(nb_samples=cli.nb_samples,
                    nb_groups=nb_groups)
@@ -146,17 +148,29 @@ class MetaParams(BaseParams):
 @dataclass
 class FittingParams(BaseParams):
 
-    nb_runs: int
-    ratio_resample: int
+    nb_runs: int = 1
+    ratio_resample: float = 0.05
+    fit_totals: bool = True
+    fit_deaths: bool = False
+    fit_recovered: bool = False
+    fit_infected: bool = False
+    fit_hospitalised: bool = False
+    fit_critical: bool = False
 
     @classmethod
     def from_default(cls):
         default_cli = FittingCLI()
-        return cls.from_cli(default_cli)
+        return cls.sample_from_cli(default_cli)
 
     @classmethod
-    def from_cli(cls, cli: FittingCLI):
+    def sample_from_cli(cls, cli: FittingCLI):
         return cls(
             nb_runs=cli.nb_runs,
-            ratio_resample=cli.ratio_resample
+            ratio_resample=cli.ratio_resample,
+            fit_totals=cli.fit_totals,
+            fit_deaths=cli.fit_deaths,
+            fit_recovered=cli.fit_recovered,
+            fit_infected=cli.fit_infected,
+            fit_hospitalised=cli.fit_hospitalised,
+            fit_critical=cli.fit_critical
         )
