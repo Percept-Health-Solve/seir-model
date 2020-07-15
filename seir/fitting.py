@@ -32,11 +32,11 @@ class BayesSIRFitter:
     def get_posterior_samples(self, **kwargs):
         log_weights = np.zeros(max(self.model.nb_samples, 1))
         if self.params.fit_deaths:
-            log_weights += self._fit_attr('deaths')
+            log_weights += self._fit_attr('deaths', self.params.fit_daily)
         if self.params.fit_recovered:
-            log_weights += self._fit_attr('recovered')
+            log_weights += self._fit_attr('recovered', self.params.fit_daily)
         if self.params.fit_infected:
-            log_weights += self._fit_attr('infected')
+            log_weights += self._fit_attr('infected', self.params.fit_daily)
         if self.params.fit_hospitalised:
             log_weights += self._fit_attr('hospitalised')
         if self.params.fit_critical:
@@ -53,6 +53,8 @@ class BayesSIRFitter:
                     posteriors[k].append(self.resample_value(vi, resample_indices))
             else:
                 posteriors[k] = self.resample_value(v, resample_indices)
+            if k == 'nb_samples':
+                posteriors[k] = self.nb_resamples
 
         return posteriors
 
@@ -62,10 +64,10 @@ class BayesSIRFitter:
         else:
             return value
 
-    def _fit_attr(self, attr):
+    def _fit_attr(self, attr, fit_daily: bool = False):
         if (
-            getattr(self.model, attr) is not None
-            and getattr(self.truth, attr) is not None
+                getattr(self.model, attr) is not None
+                and getattr(self.truth, attr) is not None
         ):
             model_td = getattr(self.model, attr)
             truth_td = getattr(self.truth, attr)
@@ -83,14 +85,26 @@ class BayesSIRFitter:
 
             model_data = model_td.data
             model_data = model_data[model_idx]
+            model_timestamp = model_timestamp[model_idx]
             truth_data = truth_td.data
             truth_data = truth_data[truth_idx]
+            truth_timestamp = truth_timestamp[truth_idx]
 
             model_data = np.sum(model_data, axis=1, keepdims=True) if self.params.fit_totals else model_data
+
+            if self.params.fit_interval > 0:
+                model_data = model_data[::self.params.fit_interval]
+                truth_data = truth_data[::self.params.fit_interval]
+                model_timestamp = model_timestamp[::self.params.fit_interval]
+                truth_timestamp = truth_timestamp[::self.params.fit_interval]
+
+            if fit_daily:
+                model_data = np.diff(model_data, axis=0) \
+                             / np.expand_dims(np.diff(model_timestamp), axis=(1, 2)) * self.params.fit_interval
+                truth_data = np.diff(truth_data, axis=0) \
+                             / np.expand_dims(np.diff(truth_timestamp), axis=(1, 2)) * self.params.fit_interval
+
             log_weights = log_lognormal_likelihood(model_data, truth_data)
             return log_weights
         log_weights = np.zeros(max(self.model.nb_samples, 1))
         return log_weights
-
-
-
