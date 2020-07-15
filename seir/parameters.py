@@ -1,7 +1,10 @@
+import pickle
+
 import numpy as np
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Union, Iterable, List
+from pathlib import Path
 
 from seir.cli import BaseDistributionCLI, OdeParamCLI, LockdownCLI, MetaCLI, FittingCLI
 from seir.defaults import NB_SAMPLES_DEFAULT
@@ -17,6 +20,47 @@ class BaseParams:
     @classmethod
     def from_cli(cls, cli):
         raise NotImplementedError
+
+    @classmethod
+    def from_dict(cls, param_dict: dict):
+        keys = {f.name for f in fields(cls) if f.init}
+        inputs = {k: v for k, v in param_dict.items() if k in keys}
+        return cls(**inputs)
+
+    @classmethod
+    def from_pkl(cls, fp: Union[str, Path]):
+        if isinstance(fp, str):
+            fp = Path(fp)
+        if len(fp.name.split('.')) < 2:
+            raise ValueError("Expected .pkl at end of name.")
+        if fp.name.split('.')[-1] != 'pkl':
+            raise ValueError(f"Expected file format to be 'pkl'. Got {fp.name.split('.')[-1]} instead.")
+        if not fp.parent.is_dir():
+            raise ValueError(f"The directory {fp.parent} is not a directory.")
+        if not fp.exists():
+            raise ValueError(f"File '{fp}' does not exist.")
+
+        with fp.open('rb') as f:
+            obj = pickle.load(f)
+
+        if not isinstance(obj, cls):
+            raise ValueError('Loaded object is not of the expected type.')
+
+        return obj
+
+
+    def to_pkl(self, fp: Union[str, Path]):
+        if isinstance(fp, str):
+            fp = Path(fp)
+        if len(fp.name.split('.')) < 2:
+            raise ValueError("Expected .pkl at end of name.")
+        if fp.name.split('.')[-1] != 'pkl':
+            raise ValueError(f"Expected file format to be 'pkl'. Got {fp.name.split('.')[-1]} instead.")
+        if not fp.parent.is_dir():
+            raise ValueError(f"The directory {fp.parent} is not a directory.")
+
+        with fp.open('wb') as f:
+            pickle.dump(self, f)
 
 
 @dataclass
