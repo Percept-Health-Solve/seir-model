@@ -37,7 +37,7 @@ def test_from_default():
 def test_from_cli():
     for param_class, cli_class in zip(param_classes, cli_classes):
         cli_ins = cli_class()
-        param_ins = param_class.from_cli(cli_ins)
+        param_ins = param_class.sample_from_cli(cli_ins)
         assert param_ins is not None
 
 

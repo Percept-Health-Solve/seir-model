@@ -1,5 +1,5 @@
 import numpy as np
-from seir.parameters import LockdownParams, MetaParams, OdeParams, BaseParams
+from seir.parameters import BaseParams
 from seir.ode import CovidSeirODE
 
 
