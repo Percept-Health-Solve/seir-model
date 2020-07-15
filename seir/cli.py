@@ -404,3 +404,21 @@ class FittingCLI(BaseCLI):
             "help": "Fits model to ICU data, if available."
         }
     )
+
+    fit_daily: bool = field(
+        default=False,
+        metadata={
+            "help": "Will fit to daily cases/deaths/etc cases instead of cumulative cases. Used to remove the serial "
+                    "dependence found in such cumulative cases."
+        }
+    )
+
+    fit_interval: int = field(
+        default=1,
+        metadata={
+            "help": "For concurrent data (hospital/icu cases), fitter will fit to every X data point, where X is "
+                    "defined here. If fitting to daily cases (see --fit_daily), will take a sum of X data points to "
+                    "use in fitting (in order to smooth out the fitting data and account for the noise in daily "
+                    "reporting statistics)."
+        }
+    )
