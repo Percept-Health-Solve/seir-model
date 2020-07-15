@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
+import datetime
 
-from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Union
+from numbers import Number
 
 
 @dataclass
@@ -67,9 +68,10 @@ class CovidData:
 class DsfsiData(CovidData):
 
     province: str = 'total'
+    filter_kwargs: dict = field(default_factory=lambda: {})
     nb_samples: int = field(init=False)
     nb_groups: int = field(init=False)
-    lockdown_date: datetime = field(init=False)
+    lockdown_date: datetime.datetime = field(init=False)
     country = 'ZAR'
 
     def __post_init__(self):
@@ -91,9 +93,9 @@ class DsfsiData(CovidData):
             url='https://raw.githubusercontent.com/dsfsi/covid19za/master/data'
                 '/covid19za_provincial_cumulative_timeline_recoveries.csv'
         )
-        super().__post_init__()
+        self._assert_shapes()
 
-    def _get_lockdown_date(self, lockdown_path: str = 'data/country_lockdown_dates.csv') -> datetime:
+    def _get_lockdown_date(self, lockdown_path: str = 'data/country_lockdown_dates.csv') -> datetime.datetime:
         df_lockdown_dates = pd.read_csv(lockdown_path)
         lockdown_date = pd.to_datetime(
             df_lockdown_dates[df_lockdown_dates['country'] == self.country].date.values[0],
@@ -102,20 +104,42 @@ class DsfsiData(CovidData):
         return lockdown_date
 
     def _get_dsfsi_data(self, url: str) -> TimestampData:
-        df_deaths = pd.read_csv(
+        df = pd.read_csv(
             url,
             parse_dates=['date'],
             date_parser=lambda t: pd.to_datetime(t, format='%d-%m-%Y')
         )
 
-        df_deaths = df_deaths[['date', self.province]]
-        df_deaths = df_deaths.dropna()
+        df = df[['date', self.province]]
+        df = df.dropna()
 
-        timestamp = df_deaths['date']
+        min_date = _parse_min_max_date(df, self.filter_kwargs.get('min_date', None))
+        max_date = _parse_min_max_date(df, self.filter_kwargs.get('max_date', None))
+
+        if not min_date:
+            min_date = df['date'].min()
+        if not max_date:
+            max_date = df['date'].max()
+
+        df = df[df['date'] >= min_date]
+        df = df[df['date'] <= max_date]
+
+        timestamp = df['date']
         timestamp = (timestamp - self.lockdown_date).dt.days
         timestamp = timestamp.values
 
-        data = df_deaths[self.province].astype(int).values
+        data = df[self.province].astype(int).values
         data = np.expand_dims(data, axis=(1, 2))
 
         return TimestampData(timestamp, data)
+
+
+def _parse_min_max_date(df, date) -> datetime.datetime:
+    if date and isinstance(date, Number):
+        if date < 0:
+            date = df['date'].max() + datetime.timedelta(days=date)
+        else:
+            date = df['date'].min() + datetime.timedelta(days=date)
+    if date and not isinstance(date, datetime.datetime):
+        raise ValueError(f'Error in parsing date {date}')
+    return date
