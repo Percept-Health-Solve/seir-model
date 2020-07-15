@@ -1,14 +1,35 @@
 import numpy as np
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from seir.cli import MetaCLI, LockdownCLI, OdeParamCLI
-from seir.parameters import MetaParams, LockdownParams, OdeParams
+from seir.parameters import BaseParams, MetaParams, LockdownParams, OdeParams
 
 
 class BaseODE:
 
+    params: dict
+
+    nb_states = None
+    removed_idx = None
+    severe_recovered_idx = None
+    deaths_idx = None
+    hospital_idx = None
+    critical_idx = None
+    infected_idx = None
+
+    @property
+    def nb_samples(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def nb_groups(self) -> int:
+        raise NotImplementedError
+
     def __call__(self, y, t):
+        raise NotImplementedError
+
+    def create_y0(self):
         raise NotImplementedError
 
 
@@ -18,8 +39,15 @@ class CovidSeirODE(BaseODE):
     meta_params: MetaParams
     lockdown_params: LockdownParams
     ode_params: OdeParams
+    params: dict = field(init=False)
 
     nb_states = 18
+    removed_idx = list(range(5, 18))
+    severe_recovered_idx = [14, 15]
+    deaths_idx = [16, 17]
+    hospital_idx = [7, 8, 9]
+    critical_idx = [10, 11]
+    infected_idx = list(range(2, 18))
 
     @property
     def nb_samples(self) -> int:
@@ -34,6 +62,7 @@ class CovidSeirODE(BaseODE):
         assert self.lockdown_params.nb_samples == self.meta_params.nb_samples
         self._assert_param_age_group()
         self._assert_valid_params()
+        self.params = {**vars(self.ode_params), **vars(self.lockdown_params)}
 
     def _assert_param_age_group(self):
         self.lockdown_params._assert_shapes(self.meta_params.nb_groups)
@@ -71,7 +100,10 @@ class CovidSeirODE(BaseODE):
 
     def __call__(self, y, t):
         y = np.asarray(y)
-        assert y.shape == (self.nb_states, self.meta_params.nb_groups, self.meta_params.nb_samples), \
+        if y.ndim == 1:
+            assert y.size == self.nb_states * self.nb_groups * self.nb_samples
+            y = y.reshape(self.nb_states, self.nb_groups, self.nb_samples)
+        assert y.shape == (self.nb_states, self.nb_groups, self.nb_samples), \
             f"Given y to ode does not match intended shape. Should have shape ({self.nb_states}, " \
             f"{self.meta_params.nb_groups}, {self.meta_params.nb_samples}), got {y.shape} instead."
         s = y[0]
@@ -86,15 +118,11 @@ class CovidSeirODE(BaseODE):
         h_d = y[9]
         c_r = y[10]
         c_d = y[11]
-        # r_a = y[12]
-        # r_m = y[13]
-        # r_h = y[14]
-        # r_c = y[15]
-        # d_h = y[16]
-        # d_c = y[17]
+        # other states not in use: r_a = y[12]; r_m = y[13]; r_h = y[14]; r_c = y[15]; d_h = y[16]; d_c = y[17]
 
         infectious_strength = np.sum(self.ode_params.rel_beta_asymptomatic * i_a + i_m + i_s, axis=0, keepdims=True)
         n = np.sum(y, axis=0)
+        n = np.sum(n, axis=0, keepdims=True)
 
         if self.ode_params.contact_k > 0:
             alpha = self.ode_params.contact_k * np.log1p(
@@ -133,6 +161,12 @@ class CovidSeirODE(BaseODE):
 
         return np.stack(dydt)
 
+    def create_y0(self):
+        y0 = np.zeros((self.nb_states, self.nb_groups, self.nb_samples))
+        y0[1, :, :] = self.ode_params.prop_e0
+        y0[0, :, :] = 1 - self.ode_params.prop_e0
+        return y0
+
     @classmethod
     def from_default(cls):
         meta_params = MetaParams.from_default()
@@ -141,8 +175,8 @@ class CovidSeirODE(BaseODE):
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
 
     @classmethod
-    def from_cli(cls, meta_cli: MetaCLI, lockdown_cli: LockdownCLI, ode_cli: OdeParamCLI):
-        meta_params = MetaParams.from_cli(meta_cli)
-        lockdown_params = LockdownParams.from_cli(lockdown_cli, meta_params.nb_samples)
-        ode_params = OdeParams.from_cli(ode_cli, meta_params.nb_samples)
+    def sample_from_cli(cls, meta_cli: MetaCLI, lockdown_cli: LockdownCLI, ode_cli: OdeParamCLI):
+        meta_params = MetaParams.sample_from_cli(meta_cli)
+        lockdown_params = LockdownParams.sample_from_cli(lockdown_cli, meta_params.nb_samples)
+        ode_params = OdeParams.sample_from_cli(ode_cli, meta_params.nb_samples)
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
