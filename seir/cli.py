@@ -37,11 +37,11 @@ def list_field(default=None, metadata=None):
     return field(default_factory=lambda: default, metadata=metadata)
 
 
-def _sample_cli_attr(attr, **kwargs) -> np.ndarray:
+def _sample_cli_attr(attr, nb_groups, nb_samples) -> np.ndarray:
     if len(attr) == 1:
         return np.asarray(attr[0])
     elif len(attr) == 2:
-        return np.random.uniform(attr[0], attr[1], **kwargs)
+        return np.random.uniform(attr[0], attr[1], size=(nb_groups, nb_samples))
     else:
         raise ValueError(f"Uniform distribution should have two values, a lower and upper bound. Got {len(attr)} "
                          f"number of parameters instead.")
@@ -71,8 +71,24 @@ class BaseDistributionCLI(BaseCLI):
             self_vars[k] = self._defaults_dict.get(k, None) if self_vars[k] is None else self_vars[k]
         return True
 
-    def sample_attr(self, attr: str, **kwargs):
-        raise NotImplementedError
+    def sample_attr(self, attr: str, nb_groups: int = 1, nb_samples: int = 1) -> np.ndarray:
+        """
+        Samples an attribute of the cli to the required scalar or uniform distribution.
+        :value attr: Attribute of the CLI to parse.
+        :return parsed_attr: Returns the appropriate sampled argument.
+        """
+        attr_val = getattr(self, attr)
+        try:
+            if (
+                    hasattr(self.__dataclass_fields__[attr].type, '__origin__')
+                    and issubclass(self.__dataclass_fields__[attr].type.__origin__, List)
+            ):
+                if self.__dataclass_fields__[attr].metadata.get('action', None) == 'append':
+                    return np.asarray([[_sample_cli_attr(x, nb_groups, nb_samples)] for x in attr_val])
+                return np.asarray(_sample_cli_attr(attr_val, nb_groups, nb_samples))
+            return attr_val
+        except Exception as e:
+            raise ValueError(f"Attribute '{attr}' failed to be parsed. Raised exception '{e}'.")
 
 
 @dataclass
@@ -104,17 +120,18 @@ class LockdownCLI(BaseDistributionCLI):
         }
     )
 
-    def sample_attr(self, attr: str, **kwargs) -> List[np.ndarray]:
+    def sample_attr(self, attr: str, nb_groups: int = 1, nb_samples: int = 1) -> List[np.ndarray]:
         attr_val = getattr(self, attr)
-        outputs = [_sample_cli_attr(attr_val[0], ** kwargs)]
+        outputs = [_sample_cli_attr(attr_val[0], nb_groups, nb_samples)]
         for i in range(1, len(attr_val)):
             if len(attr_val[i]) == 1:
                 outputs.append(np.asarray(attr_val[i][0]))
             elif len(attr_val[i]) == 2:
                 if attr_val[i][0] < 0:
-                    outputs.append(np.random.uniform(outputs[i-1] - abs(attr_val[i][0]), attr_val[i][1], **kwargs))
+                    outputs.append(np.random.uniform(outputs[i-1] - abs(attr_val[i][0]), attr_val[i][1],
+                                                     size=(nb_groups, nb_samples)))
                 else:
-                    outputs.append(np.random.uniform(attr_val[i][0], attr_val[i][1], **kwargs))
+                    outputs.append(np.random.uniform(attr_val[i][0], attr_val[i][1], size=(nb_groups, nb_samples)))
         return outputs
 
 
@@ -140,7 +157,6 @@ class OdeParamCLI(BaseDistributionCLI):
         'time_c_to_r': TIME_C_TO_R_DEFAULT,
         'time_c_to_d': TIME_C_TO_D_DEFAULT,
         'contact_k': CONTACT_K_DEFAULT,
-        'prop_e0': PROP_E0_DEFAULT
     }
 
     r0: List[float] = list_field(
@@ -291,6 +307,14 @@ class OdeParamCLI(BaseDistributionCLI):
         }
     )
 
+
+@dataclass
+class Y0CLI(BaseDistributionCLI):
+
+    _defaults_dict = {
+        'prop_e0': PROP_E0_DEFAULT
+    }
+
     prop_e0: List[float] = list_field(
         default=None,
         metadata={
@@ -298,25 +322,6 @@ class OdeParamCLI(BaseDistributionCLI):
                     "to a Uniform prior U(0, 1e-6). Single attr defines a scalar, two inputs define a Uniform prior."
         }
     )
-
-    def sample_attr(self, attr: str, **kwargs) -> np.ndarray:
-        """
-        Samples an attribute of the cli to the required scalar or uniform distribution.
-        :value attr: Attribute of the CLI to parse.
-        :return parsed_attr: Returns the appropriate sampled argument.
-        """
-        attr_val = getattr(self, attr)
-        try:
-            if (
-                hasattr(self.__dataclass_fields__[attr].type, '__origin__')
-                and issubclass(self.__dataclass_fields__[attr].type.__origin__, List)
-            ):
-                if self.__dataclass_fields__[attr].metadata.get('action', None) == 'append':
-                    return np.asarray([[_sample_cli_attr(x, **kwargs)] for x in attr_val])
-                return np.asarray(_sample_cli_attr(attr_val, **kwargs))
-            return attr_val
-        except Exception as e:
-            raise ValueError(f"Attribute '{attr}' failed to be parsed. Raised exception '{e}'.")
 
 
 @dataclass
