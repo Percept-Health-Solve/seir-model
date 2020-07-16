@@ -91,6 +91,9 @@ class BayesSIRFitter:
             truth_timestamp = truth_timestamp[truth_idx]
 
             model_data = np.sum(model_data, axis=1, keepdims=True) if self.params.fit_totals else model_data
+            truth_data = np.sum(truth_data, axis=1, keepdims=True) if self.params.fit_totals else truth_data
+            assert model_data.shape[1] == truth_data.shape[1], \
+                "Number of groups between model and true data does not match. Can be overcome by fitting to totals"
 
             if self.params.fit_interval > 0:
                 model_data = model_data[::self.params.fit_interval]
