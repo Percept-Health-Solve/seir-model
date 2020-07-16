@@ -77,15 +77,20 @@ def test_ode_params():
             'time_c_to_d': np.random.uniform(1, 2, size=(1, nb_samples)),
             'time_c_to_r': np.random.uniform(1, 2, size=(1, nb_samples)),
             'contact_k': np.random.uniform(0, 2, size=(1, nb_samples)),
+            'hospital_loading': np.random.uniform(0.9, 1.1, size=(1, nb_samples)),
+            'mortality_loading': np.random.uniform(0.9, 1.1, size=(1, nb_samples)),
         }
 
         ode_params = SampleOdeParams(**kwargs)
 
         kwargs['beta'] = kwargs['r0'] / kwargs['time_infectious']
-        kwargs['prop_m'] = 1 - kwargs['prop_a'] - kwargs['prop_s']
+        kwargs['prop_s_adj'] = (1 - kwargs['prop_a']) * kwargs['prop_s'] * kwargs['hospital_loading']
+        kwargs['prop_m'] = (1 - kwargs['prop_a']) * (1 - kwargs['prop_s'] * kwargs['hospital_loading'])
         kwargs['prop_s_to_c'] = 1 - kwargs['prop_s_to_h']
-        kwargs['prop_h_to_r'] = 1 - kwargs['prop_h_to_c'] - kwargs['prop_h_to_d']
-        kwargs['prop_c_to_r'] = 1 - kwargs['prop_c_to_d']
+        kwargs['prop_h_to_d_adj'] = kwargs['prop_h_to_d'] * kwargs['mortality_loading']
+        kwargs['prop_h_to_r'] = 1 - kwargs['prop_h_to_c'] - kwargs['prop_h_to_d_adj']
+        kwargs['prop_c_to_d_adj'] = kwargs['prop_c_to_d'] * kwargs['mortality_loading']
+        kwargs['prop_c_to_r'] = 1 - kwargs['prop_c_to_d_adj']
         kwargs['time_rsh_to_h'] = kwargs['time_s_to_h'] - kwargs['time_infectious']
         kwargs['time_rsc_to_c'] = kwargs['time_s_to_c'] - kwargs['time_infectious']
 
