@@ -47,12 +47,24 @@ def _sample_cli_attr(attr, nb_groups, nb_samples) -> np.ndarray:
                          f"number of parameters instead.")
 
 
+
 class BaseCLI:
 
-    def save_to_json(self, path: Union[str, Path]):
-        if not isinstance(path, Path):
-            path = Path(path)
-        # TODO: flesh this out
+    def to_json(self, fp: Union[str, Path]):
+        if isinstance(fp, str):
+            fp = Path(fp)
+        if len(fp.name.split('.')) < 2:
+            raise ValueError("Expected .json at end of name.")
+        if fp.name.split('.')[-1] != 'json':
+            raise ValueError(f"Expected file format to be 'json'. Got {fp.name.split('.')[-1]} instead.")
+        if not fp.parent.is_dir():
+            raise ValueError(f"The directory {fp.parent} is not a directory.")
+
+        with fp.open('wb') as f:
+            json.dump(asdict(self), f, indent=4)
+
+    def to_json_string(self):
+        return json.dumps(asdict(self), indent=4)
 
 
 class BaseDistributionCLI(BaseCLI):
