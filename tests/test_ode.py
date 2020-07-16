@@ -25,14 +25,19 @@ def assert_param_equal(a: BaseParams, b: BaseParams):
             assert len(a_vars[k]) == len(b_vars[k])
             for i in range(len(a_vars[k])):
                 assert np.all(a_vars[k][i] == b_vars[k][i])
+        elif isinstance(a_vars[k], dict):
+            assert isinstance(b_vars[k], dict)
+            for k in a_vars:
+                assert k in b_vars
+                assert a_vars[k] == b_vars[k]
         else:
             assert np.all(a_vars[k] == b_vars[k])
 
 
 def assert_ode_equal(a: CovidSeirODE, b: CovidSeirODE):
     """Pseudo checks if two parameter objects are equal"""
-    a_vars = vars(a).copy()
-    b_vars = vars(b).copy()
+    a_vars = {k: v for k, v in vars(a).items() if k != 'params'}
+    b_vars = {k: v for k, v in vars(b).items() if k != 'params'}
     assert len(a_vars) == len(b_vars)
     for k in a_vars:
         assert k in b_vars

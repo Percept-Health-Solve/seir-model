@@ -62,7 +62,7 @@ class CovidSeirODE(BaseODE):
         assert self.lockdown_params.nb_samples == self.meta_params.nb_samples
         self._assert_param_age_group()
         self._assert_valid_params()
-        self.params = {**vars(self.ode_params), **vars(self.lockdown_params)}
+        self.params = {**vars(self.meta_params), **vars(self.ode_params), **vars(self.lockdown_params)}
 
     def _assert_param_age_group(self):
         self.lockdown_params._assert_shapes(self.meta_params.nb_groups)
@@ -136,17 +136,17 @@ class CovidSeirODE(BaseODE):
         de = alpha * s - e / self.ode_params.time_incubate
         di_a = self.ode_params.prop_a * e / self.ode_params.time_incubate - i_a / self.ode_params.time_infectious
         di_m = self.ode_params.prop_m * e / self.ode_params.time_incubate - i_m / self.ode_params.time_infectious
-        di_s = self.ode_params.prop_s * e / self.ode_params.time_incubate - i_s / self.ode_params.time_infectious
+        di_s = self.ode_params.prop_s_adj * e / self.ode_params.time_incubate - i_s / self.ode_params.time_infectious
         dr_sh = self.ode_params.prop_s_to_h * i_s / self.ode_params.time_infectious \
             - r_sh / self.ode_params.time_rsh_to_h
         dr_sc = self.ode_params.prop_s_to_c * i_s / self.ode_params.time_infectious \
             - r_sc / self.ode_params.time_rsc_to_c
         dh_r = self.ode_params.prop_h_to_r * r_sh / self.ode_params.time_rsh_to_h - h_r / self.ode_params.time_h_to_r
         dh_c = self.ode_params.prop_h_to_c * r_sh / self.ode_params.time_rsh_to_h - h_c / self.ode_params.time_h_to_c
-        dh_d = self.ode_params.prop_h_to_d * r_sh / self.ode_params.time_rsh_to_h - h_d / self.ode_params.time_h_to_d
+        dh_d = self.ode_params.prop_h_to_d_adj * r_sh / self.ode_params.time_rsh_to_h - h_d / self.ode_params.time_h_to_d
         dc_r = self.ode_params.prop_c_to_r * (h_c / self.ode_params.time_h_to_c + r_sc / self.ode_params.time_rsc_to_c)\
             - c_r / self.ode_params.time_c_to_r
-        dc_d = self.ode_params.prop_c_to_d * (h_c / self.ode_params.time_h_to_c + r_sc / self.ode_params.time_rsc_to_c)\
+        dc_d = self.ode_params.prop_c_to_d_adj * (h_c / self.ode_params.time_h_to_c + r_sc / self.ode_params.time_rsc_to_c)\
             - c_d / self.ode_params.time_c_to_d
         dr_a = i_a / self.ode_params.time_infectious
         dr_m = i_m / self.ode_params.time_infectious
@@ -173,4 +173,11 @@ class CovidSeirODE(BaseODE):
         meta_params = MetaParams.from_cli(meta_cli)
         lockdown_params = SampleLockdownParams.sample_from_cli(lockdown_cli, meta_params.nb_samples)
         ode_params = SampleOdeParams.sample_from_cli(ode_cli, meta_params.nb_samples)
+        return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
+
+    @classmethod
+    def from_dict(cls, params: dict):
+        meta_params = MetaParams.from_dict(params)
+        lockdown_params = SampleLockdownParams.from_dict(params)
+        ode_params = SampleOdeParams.from_dict(params)
         return cls(meta_params=meta_params, lockdown_params=lockdown_params, ode_params=ode_params)
