@@ -73,6 +73,7 @@ parser.add_argument('--mort_loading_range', default=[0.3, 1.1], type=float, narg
                     help='Mortality loading uniform distribution range')
 
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
+parser.add_argument('--prop_immune', type=float, default=0)
 
 
 def main():
@@ -149,7 +150,7 @@ def main():
                          f"Should be 'WC' or 'national', got '{args.fit_data}' instead.")
 
     # save model args to config file
-    if not args.only_process_runs:
+    if not args.only_process_runs and not args.only_plot:
         with open(output_dir.joinpath(f"{args.model_name}_config.json"), 'wt') as f:
             # save the json, but don't include the overwrite or from_json commands
             cmds = vars(args).copy()
@@ -275,17 +276,17 @@ def build_and_solve_model(t_obs,
                           args=None,
                           load_prior_file: Path = None,
                           model_base: Path = Path('data/model')):
-    """Build and solve a sampling model, fitting to the given observed variables at the observed time.
+    """Build and solve a sampling model, fitting to the given truth variables at the truth time.
 
-    :param t_obs: Time at which observations are made.
-    :param i_d_obs: Detected observed cases.
-    :param i_h_obs: Hospitalised observed cases.
-    :param i_icu_obs: ICU observed cases.
-    :param d_icu_obs: Deceased observed cases.
-    :param args: Command line arguments.
-    :param total_pop: Total population to consider.
-    :param load_prior_file: Loads proportions from a prior csv file. This should be generated from a previous fit.
-    :param model_base: The model base directory. Defaults to 'data/model', where 'data/' is the output_dir and 'model'
+    :value t_obs: Time at which observations are made.
+    :value i_d_obs: Detected truth cases.
+    :value i_h_obs: Hospitalised truth cases.
+    :value i_icu_obs: ICU truth cases.
+    :value d_icu_obs: Deceased truth cases.
+    :value args: Command line arguments.
+    :value total_pop: Total population to consider.
+    :value load_prior_file: Loads proportions from a prior csv file. This should be generated from a previous fit.
+    :value model_base: The model base directory. Defaults to 'data/model', where 'data/' is the output_dir and 'model'
     is the model name. Saves plots to '{model_base}_priors_posterior.png', and '{model_base}_joint_posterior.png'.
     We also save the models variables to '{model_base}_*.pkl'. See the model documentation for more information on the
     model variables.
@@ -310,7 +311,7 @@ def build_and_solve_model(t_obs,
     time_c_to_d = 13
 
     if not load_prior_file:
-        logging.info('Setting priors')
+        logging.info('Setting priors_params')
         time_infectious = _uniform_from_range(args.time_infectious_range, size=(nb_samples, 1))
         prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         prop_s_to_h = _uniform_from_range(args.prop_s_to_h_range, size=(nb_samples, 1))
@@ -318,10 +319,10 @@ def build_and_solve_model(t_obs,
         r0 = _uniform_from_range(args.r0_range, size=(nb_samples, 1))
         beta = r0 / time_infectious
         rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
-        rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, 1, size=(nb_samples, 1))
-        rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.05, 1, size=(nb_samples, 1))
+        rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, (rel_lockdown5_beta+0.2).clip(max=1), size=(nb_samples, 1))
+        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=0.9), size=(nb_samples, 1))
+        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=0.8), size=(nb_samples, 1))
+        rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.01, (rel_lockdown2_beta+0.1), size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
         e0 = _uniform_from_range(args.e0_range, size=(nb_samples, 1))
@@ -331,12 +332,12 @@ def build_and_solve_model(t_obs,
             prop_m = (1 - prop_a) * 0.957  # ferguson gives approx 95.7 % of WC symptomatic requires h on average
             mort_loading = _uniform_from_range(args.mort_loading_range, size=(nb_samples, 1))
             prop_h_to_c = 6/1238
-            prop_h_to_d = mort_loading * 270 / 1704
+            prop_h_to_d = mort_loading * 103 / 825
             prop_c_to_d = mort_loading * 54 / 119
         else:
             logging.info('Using 9 age groups, corresponding to 10 year age bands.')
             # from ferguson
-            prop_m = (1 - prop_a) * np.array([[0.999, 0.997, 0.988, 0.968, 0.951, 0.898, 0.834, 0.757, 0.727]])
+            prop_m = (1 - prop_a) * np.array([[0.6958, 0.6979, 0.686 , 0.6734, 0.658 , 0.6356, 0.6223, 0.5964,0.5628]])
             # inform variables from the WC experience, controlling for age
             # these are calculated from WC data, where the proportions are found from patients with known outcomes
             # TODO: Change beta distributions to dirichlet distributions
@@ -346,7 +347,7 @@ def build_and_solve_model(t_obs,
             prop_h_to_c = 6/1238  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
     else:
         # load df
-        logging.info(f"Loading proportion priors from {load_prior_file}")
+        logging.info(f"Loading proportion priors_params from {load_prior_file}")
 
         if load_prior_file.suffix == '.csv':
             logging.info('Loading csv file')
@@ -568,8 +569,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
         elif args.fit_data.lower() == 'national':
             df_pop = df_pop['Grand Total']
         total_pop = df_pop.sum()
-        y0[:, :, 0] = (1 - e0) * total_pop
-        y0[:, :, 1] = e0 * total_pop
+        y0[:, :, 0] = (1 - e0) * total_pop * (1 - args.prop_immune)
+        y0[:, :, 1] = e0 * total_pop * (1 - args.prop_immune)
     else:
         # multiple population groups as a result of age bands
         # have to proportion the starting populations respectively
@@ -599,8 +600,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
             df_pop['Western Cape'] = df_pop['Western Cape'] * 7000000 / df_pop[
                 'Western Cape'].sum()  # adjust to Andrew's 7m for now
         for i in range(nb_groups):
-            y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0]
-            y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0]
+            y0[:, i, 0] = (1 - e0[:, 0]) * df_pop[filter][df_pop['idx'] == i].values[0] * (1 - args.prop_immune)
+            y0[:, i, 1] = e0[:, 0] * df_pop[filter][df_pop['idx'] == i].values[0] * (1 - args.prop_immune)
     y0 = y0.reshape(-1)
     return y0, e0
 
@@ -608,8 +609,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
 def save_model_variables(model: SamplingNInfectiousModel, base='data/samples'):
     """Saves a sampling models varibles (stored as dictionary) for use later.
 
-    :param model: A solved sampling model.
-    :param base: The base directory at which to store the variables. Default is 'data/model', where 'data/' is the
+    :value model: A solved sampling model.
+    :value base: The base directory at which to store the variables. Default is 'data/model', where 'data/' is the
     outputdirectory and 'model' is the model name.
     """
     nb_groups = model.nb_groups
@@ -680,7 +681,7 @@ def load_data_WC(remove_small: bool = True):
     # the WC reporting has some lag, so choose a date to set as the maximum date for each of the dfs
     max_date = np.min([df_deaths['date'].max(), df_confirmed['date'].max(), df_hosp_icu['date'].max()])
     max_date = max_date - datetime.timedelta(days=5)  # max date set as 5 days prior to shared maximum date
-    min_date = max_date - datetime.timedelta(days=35) # min date set to 30 days prior the maximum date, to remove noise
+    min_date = max_date - datetime.timedelta(days=45) # min date set to 30 days prior the maximum date, to remove noise
 
     # filter maximum date
     df_deaths = df_deaths[df_deaths['date'] <= max_date]
@@ -938,7 +939,7 @@ def calculate_resample(t_obs,
     d_tot = np.sum(d_c + d_h, axis=2)
     ifr = d_tot / np.sum(y[:, :, :, 2:], axis=(2, 3))
     hfr = d_tot / np.sum(r_h + r_c + d_h + d_c, axis=2)
-    atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / model.n.reshape(-1)
+    atr = np.sum(y[:, :, :, 2:], axis=(2, 3)) / (model.n.reshape(-1) / (1 - args.prop_immune))
 
     daily_deaths = np.diff(d_tot, axis=0, prepend=0)
     d_icu_obs_daily = np.diff(d_icu_obs)
@@ -949,7 +950,7 @@ def calculate_resample(t_obs,
     pred_vars = [cum_detected_samples, h_tot, c_tot, d_tot, daily_deaths, ifr, hfr, atr]
     obs_vars = [i_d_obs, i_h_obs, i_icu_obs, d_icu_obs, d_icu_obs_daily, None, None, None]
     titles = ['Total Infected', 'Current Hospitalised', 'Current ICU', 'Cum Deaths', 'Daily Deaths',
-              'Infection Fatality Ratio', 'Outpatient Fatality Ratio', 'Attack Rate']
+              'Infection Fatality Ratio', 'Inpatient Fatality Ratio', 'Attack Rate']
 
     assert len(pred_vars) == len(obs_vars) and len(obs_vars) == len(titles)
 
