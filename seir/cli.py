@@ -29,6 +29,8 @@ from seir.defaults import (
     TIME_C_TO_R_DEFAULT,
     TIME_C_TO_D_DEFAULT,
     CONTACT_K_DEFAULT,
+    HOSPITAL_LOADING_DEFAULT,
+    MORTALITY_LOADING_DEFAULT,
     PROP_E0_DEFAULT
 )
 
@@ -169,6 +171,8 @@ class OdeParamCLI(BaseDistributionCLI):
         'time_c_to_r': TIME_C_TO_R_DEFAULT,
         'time_c_to_d': TIME_C_TO_D_DEFAULT,
         'contact_k': CONTACT_K_DEFAULT,
+        'mortality_loading': MORTALITY_LOADING_DEFAULT,
+        'hospital_loading': HOSPITAL_LOADING_DEFAULT
     }
 
     r0: List[float] = list_field(
@@ -299,7 +303,7 @@ class OdeParamCLI(BaseDistributionCLI):
         default=None,
         metadata={
             "help": "Days from critical care admission to recovery, for those that will recover. Defaults to "
-                    "calcualtions from WC data (see Data documentation)."
+                    "calculations from WC data (see Data documentation)."
         }
     )
 
@@ -307,15 +311,31 @@ class OdeParamCLI(BaseDistributionCLI):
         default=None,
         metadata={
             "help": "Days from critical care admission to death, for those that will die. Defaults to "
-                    "calcualtions from WC data (see Data documentation)."
+                    "calculations from WC data (see Data documentation)."
         }
     )
 
     contact_k: List[float] = list_field(
         default=None,
         metadata={
-            "help": "Contact heterogeneity factor from Kong et. al. (see References documentation). Defaults to None, "
+            "help": "Contact heterogeneity factor from Kong et. al. (see References documentation). Defaults to 0, "
                     "implying contact is homogeneous."
+        }
+    )
+
+    mortality_loading: List[float] = list_field(
+        default=None,
+        metadata={
+            "help": "Mortality loading parameter applied to deaths. Used to pseudo inform the uncertainty in these"
+                    "parameters while keeping the shape of mortality over age groups constant."
+        }
+    )
+
+    hospital_loading: List[float] = list_field(
+        default=None,
+        metadata={
+            "help": "Hospital loading parameter applied to deaths. Used to pseudo inform the uncertainty in these"
+                    "parameters while keeping the shape of those going to hospital over age groups constant."
         }
     )
 
@@ -353,6 +373,11 @@ class MetaCLI(BaseCLI):
                     "80+. The age defined attack rates are informed by Ferguson et al. (see References documentation)."
         }
     )
+
+    nb_groups: int = field(init=False)
+
+    def __post_init__(self):
+        self.nb_groups = 9 if self.age_heterogeneity else 1
 
 
 @dataclass
