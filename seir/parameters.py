@@ -153,16 +153,27 @@ class SampleOdeParams(BaseSampleParams):
     time_c_to_d: Union[float, np.ndarray]
     time_c_to_r: Union[float, np.ndarray]
     contact_k: Union[float, np.ndarray]
+    hospital_loading: Union[float, np.ndarray] = 1
+    mortality_loading: Union[float, np.ndarray] = 1
+    prop_s_adj: Union[float, np.ndarray] = field(init=False)
+    prop_h_to_d_adj: Union[float, np.ndarray] = field(init=False)
+    prop_c_to_d_adj: Union[float, np.ndarray] = field(init=False)
 
     def __post_init__(self):
         self.beta = self.r0 / self.time_infectious
-        self.prop_m = 1 - self.prop_a - self.prop_s
+        self.prop_s_adj = (1 - self.prop_a) * self.prop_s * self.hospital_loading
+        self.prop_m = (1 - self.prop_a) * (1 - self.prop_s * self.hospital_loading)
         self.prop_s_to_c = 1 - self.prop_s_to_h
-        self.prop_h_to_r = 1 - self.prop_h_to_c - self.prop_h_to_d
-        self.prop_c_to_r = 1 - self.prop_c_to_d
+        self.prop_h_to_d_adj = self.prop_h_to_d * self.mortality_loading
+        self.prop_h_to_r = 1 - self.prop_h_to_c - self.prop_h_to_d_adj
+        self.prop_c_to_d_adj = self.prop_c_to_d * self.mortality_loading
+        self.prop_c_to_r = 1 - self.prop_c_to_d_adj
         self.time_rsh_to_h = self.time_s_to_h - self.time_infectious
         self.time_rsc_to_c = self.time_s_to_c - self.time_infectious
         self._assert_shapes()
+        # TODO: Flesh out asserts
+        assert np.all(np.abs(self.prop_a + self.prop_m + self.prop_s_adj - 1) < 1e-15)
+        assert np.all(np.abs(self.prop_h_to_r + self.prop_h_to_c + self.prop_h_to_d_adj - 1) < 1e-15)
 
     def _assert_shapes(self, nb_groups: int = None):
         for k, v in self.__dict__.items():
