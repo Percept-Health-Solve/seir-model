@@ -14,7 +14,7 @@ from seir.cli import MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, BaseDistribu
 from seir.parameters import FittingParams
 from seir.ode import CovidSeirODE
 from seir.solvers import ScipyOdeIntSolver
-from seir.data import DsfsiData, extend_data_samples
+from seir.data import DsfsiData, CovidData, TimestampData, extend_data_samples, append_data_time
 from seir.fitting import BayesSIRFitter
 
 
@@ -22,7 +22,7 @@ from seir.fitting import BayesSIRFitter
 class InitialCLI(BaseDistributionCLI):
     _defaults_dict = {
         't0': -50,
-        'prop_e0': [0, 1e-6],
+        'prop_e0': [0, 1e-5],
         'province': 'total'
     }
 
@@ -34,7 +34,7 @@ class InitialCLI(BaseDistributionCLI):
     )
 
     prop_e0: List[float] = field(
-        default_factory=lambda: [0, 1e-6],
+        default_factory=lambda: [0, 1e-5],
         metadata={
             "help": "Proportion of exposed individuals at t0. Used to seed the SEIR model."
         }
@@ -192,7 +192,8 @@ def main():
         population_band = np.sum(population_band)
     population_band = np.expand_dims(population_band, axis=1)
 
-    data = DsfsiData(initial_cli.province, filter_kwargs={'min_date': pd.to_datetime('2020/04/05', format='%Y/%m/%d')})
+    data = DsfsiData(province=initial_cli.province,
+                     filter_kwargs={'min_date': pd.to_datetime('2020/04/05', format='%Y/%m/%d')})
 
     all_solutions = None
     for run in range(fitting_cli.nb_runs):
@@ -204,10 +205,8 @@ def main():
         y0[1] = e0 * population_band
         y0[0] = (1 - e0) * population_band
 
-        t = data.all_timestamps()
-        if initial_cli.t0 >= t.min():
-            pass
-        else:
+        t = np.arange(max(data.all_timestamps().min(), initial_cli.t0), data.all_timestamps().max()+1)
+        if initial_cli.t0 < t.min():
             t = np.concatenate([[initial_cli.t0], t])
 
         solution, full_sol = solver.solve(y0, t, return_full=True)
@@ -241,23 +240,39 @@ def main():
     prior_dict = process_runs(output_cli.run_path, fitting_cli.nb_runs)
     fitter = BayesSIRFitter(all_solutions, data, FittingParams.from_cli(fitting_cli))
     posterior_dict = fitter.get_posterior_samples(**prior_dict)
-    print(posterior_dict['nb_samples'])
 
-    fig, axes = plt.subplots(1, 6, figsize=(18, 3))
-    axes = axes.flat
-    axes[0].plot(solution.deaths.timestamp, np.mean(np.sum(posterior_dict['deaths'], axis=1), axis=-1))
-    axes[0].plot(data.deaths.timestamp, data.deaths.data[:, 0, 0], 'x')
-    axes[1].plot(solution.deaths.timestamp[1:], np.mean(np.diff(np.sum(posterior_dict['deaths'], axis=1), axis=0)
-                                                        / np.expand_dims(np.diff(solution.deaths.timestamp), axis=1),
-                                                        axis=-1))
-    axes[1].plot(data.deaths.timestamp[1:], np.diff(data.deaths.data[:, 0, 0]) / np.diff(data.deaths.timestamp), 'x')
-    axes[2].plot(solution.critical.timestamp, np.mean(np.sum(posterior_dict['critical'], axis=1), axis=-1))
-    axes[3].plot(solution.hospitalised.timestamp, np.mean(np.sum(posterior_dict['hospitalised'], axis=1), axis=-1))
-    axes[4].plot(solution.infected.timestamp, np.mean(np.sum(posterior_dict['infected'], axis=1), axis=-1))
-    axes[4].plot(data.infected.timestamp, data.infected.data[:, 0, 0], 'x')
-    axes[5].plot(solution.infected.timestamp, np.mean(posterior_dict['attack_rate'], axis=-1))
+    fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
+                                      ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
+                                       'mortality_loading', 'hospital_loading'])
     plt.tight_layout()
-    # plt.show()
+    fig.savefig(output_cli.output_path.joinpath(f'prior_posterior.png'))
+
+    posterior_solution = CovidData(nb_groups=posterior_dict['nb_groups'], nb_samples=posterior_dict['nb_samples'],
+                                   deaths=TimestampData(t, posterior_dict['deaths']),
+                                   hospitalised=TimestampData(t, posterior_dict['hospitalised']),
+                                   critical=TimestampData(t, posterior_dict['critical']),
+                                   infected=TimestampData(t, posterior_dict['infected']))
+
+    ode_post = CovidSeirODE.from_dict(posterior_dict)
+    solve_post = ScipyOdeIntSolver(ode_post)
+    y0_post = posterior_dict['full_solution'][-1]
+    t_post = np.arange(t[-1], 300)
+    extended_sol = solve_post.solve(y0_post, t_post, exclude_t0=True)
+    projections = append_data_time(posterior_solution, extended_sol)
+
+    fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+    axes = data.plot(axes=axes, plot_daily_deaths=True, group_total=True, plot_kwargs={'color': 'C1'},
+                     plot_fmt='x', timestamp_shift=data.lockdown_date)
+    axes = posterior_solution.plot(axes=axes, plot_daily_deaths=True, group_total=True,
+                                   timestamp_shift=data.lockdown_date, plot_kwargs={'color': 'C0'})
+    plt.tight_layout()
+    fig.savefig(output_cli.output_path.joinpath('predictions_short_term.png'))
+
+    fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+    projections.plot(axes=axes, plot_daily_deaths=True, group_total=True, timestamp_shift=data.lockdown_date,
+                      plot_kwargs={'color': 'C0'})
+    plt.tight_layout()
+    fig.savefig(output_cli.output_path.joinpath('predictions_long_term.png'))
 
 
 if __name__ == '__main__':
