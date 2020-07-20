@@ -17,7 +17,7 @@ class ScipyOdeIntSolver:
     _solved_y0: Union[List, np.ndarray] = field(default=None, init=False)
     _solution: CovidData = field(default=None, init=False)
 
-    def solve(self, y0, t, return_full: bool = True, sol_multiplier: float = 1) -> Union[CovidData, Tuple[CovidData, np.ndarray]]:
+    def solve(self, y0, t, return_full: bool = False, sol_multiplier: float = 1, exclude_t0=False) -> Union[CovidData, Tuple[CovidData, np.ndarray]]:
         y0 = np.asarray(y0)
         t = np.asarray(t)
 
@@ -38,6 +38,13 @@ class ScipyOdeIntSolver:
         hospitalised = np.sum(y[:, self.ode.hospital_idx], axis=1)
         critical = np.sum(y[:, self.ode.critical_idx], axis=1)
         deaths = np.sum(y[:, self.ode.deaths_idx], axis=1)
+
+        if exclude_t0:
+            infected = infected[1:]
+            hospitalised = hospitalised[1:]
+            critical = critical[1:]
+            deaths = deaths[1:]
+            t = t[1:]
 
         solution = CovidData(
             nb_samples=self.ode.nb_samples,
