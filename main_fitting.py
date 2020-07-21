@@ -274,6 +274,19 @@ def main():
     plt.tight_layout()
     fig.savefig(output_cli.output_path.joinpath('predictions_long_term.png'))
 
+    if meta_cli.age_heterogeneity:
+        df_projections_by_age = projections.to_dataframe(
+            group_labels=['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
+            timestamp_shift=data.lockdown_date
+        )
+        df_projections_by_age.to_csv(output_cli.output_path.joinpath('projections_by_age.csv'))
+
+    df_projections_total = projections.to_dataframe(
+        group_total=True,
+        timestamp_shift=data.lockdown_date
+    )
+    df_projections_total.to_csv(output_cli.output_path.joinpath('projections_total.csv'))
+
 
 if __name__ == '__main__':
     main()
