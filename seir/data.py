@@ -3,9 +3,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
 
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Union, List
 from numbers import Number
+from collections import defaultdict
 
 
 @dataclass
@@ -63,6 +65,45 @@ class CovidData:
         output = np.unique(output)
         output = np.sort(output, axis=None)
         return output
+
+    def to_dataframe(self,
+                     group_labels=None,
+                     group_total: bool = False,
+                     timestamp_shift: Union[datetime.datetime, float, int] = None):
+        if group_labels is None:
+            if group_total:
+                group_labels = ['total']
+            else:
+                group_labels = [f'{i}' for i in range(self.nb_groups)]
+        else:
+            assert len(group_labels) == self.nb_groups
+
+        names = ['deaths', 'critical', 'hospitalised', 'infected', 'recovered']
+        td_data = [self.deaths, self.critical, self.hospitalised, self.infected, self.recovered]
+
+        convert = defaultdict(lambda: {})
+        for name, td in zip(names, td_data):
+            if td is not None:
+                for t_idx, t in enumerate(td.timestamp):
+                    d = td.data
+                    if group_total:
+                        d = np.sum(d, axis=1, keepdims=True)
+                    add_dict = {}
+                    for i in range(d.shape[1]):
+                        add_dict.update({
+                            f'{name}_median_{group_labels[i]}': np.median(d[t_idx, i], axis=-1),
+                            f'{name}_2.5CI_{group_labels[i]}': np.percentile(d[t_idx, i], 2.5, axis=-1),
+                            f'{name}_97.5CI_{group_labels[i]}': np.percentile(d[t_idx, i], 97.5, axis=-1)
+                        })
+                    if timestamp_shift is not None:
+                        if isinstance(timestamp_shift, datetime.datetime):
+                            t = timestamp_shift + datetime.timedelta(days=float(t))
+                        else:
+                            t = t + timestamp_shift
+                    convert[t].update(add_dict)
+
+        return pd.DataFrame.from_dict(convert).transpose()
+
 
     def plot(self,
              axes: List[plt.axes] = None,
