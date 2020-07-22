@@ -51,25 +51,62 @@ def _sample_cli_attr(attr, nb_groups, nb_samples) -> np.ndarray:
 
 
 class BaseCLI:
+    """
+    Base class for all command line interface dataclass objects. These are designed to be used with the
+    DataClassArgumentParser object from the seir.argparser module. Contains basic methods that allow the the CLI
+    arguments to be saved as a json object or parsed as a json string.
+
+    Objects inheriting from this should be a dataclass. Parameters of the inherited objects should be defined as a
+    dataclass field, with a dict "metadata" being parsed as the kwargs of an argument in pythons built-in argparser
+    module.
+    """
 
     def to_json(self, fp: Union[str, Path]):
+        """
+        Saves the command line interface object to a json file. Only saves the file, will not create any parent
+        directories.
+
+        Parameters
+        ----------
+        fp: str, Path
+            The file path at which to save the objects json string.
+
+        Returns
+        -------
+        None
+        """
         if isinstance(fp, str):
             fp = Path(fp)
-        if len(fp.name.split('.')) < 2:
-            raise ValueError("Expected .json at end of name.")
-        if fp.name.split('.')[-1] != 'json':
-            raise ValueError(f"Expected file format to be 'json'. Got {fp.name.split('.')[-1]} instead.")
         if not fp.parent.is_dir():
             raise ValueError(f"The directory {fp.parent} is not a directory.")
 
         with fp.open('wb') as f:
             json.dump(asdict(self), f, indent=4)
 
-    def to_json_string(self):
+    def to_json_string(self) -> str:
+        """
+        Returns the json string of the command line object.
+
+        Returns
+        -------
+        json_string: str
+            The json string of the object.
+        """
         return json.dumps(asdict(self), indent=4)
 
 
 class BaseDistributionCLI(BaseCLI):
+    """
+    Base class for command line arguments that define distributions. Assumes that the defined distribution is uniform.
+    Parses its own arguments by treating a single input in a list as a float, and two inputs as defining the bounds
+    of a uniform distribution. Possesses a sample_attr method that will return a number of random samples from the
+    uniform distribution, shaped in such a way as to be digested for the sample parameter objects in the seir.parameters
+    module.
+
+    Objects inheriting from this should be a dataclass. Parameters of inherited the objects should be defined as a
+    dataclass field, with a dict "metadata" being parsed as the kwargs of an argument in pythons built-in argparser
+    module.
+    """
 
     _defaults_dict = {}
 
@@ -80,6 +117,16 @@ class BaseDistributionCLI(BaseCLI):
         self._set_defaults()
 
     def _set_defaults(self):
+        """
+        Method for setting of defaults in the base distribution object. Used to overcome problems with setting the
+        defaults of parameters that contain the allow appending via the key value pair ("action", "append") in a
+        parameters metedata.
+
+        Returns
+        -------
+        out: bool
+            Returns true if performed successfully.
+        """
         self_vars = self.__dict__
         for k in self_vars:
             self_vars[k] = self._defaults_dict.get(k, None) if self_vars[k] is None else self_vars[k]
@@ -88,8 +135,31 @@ class BaseDistributionCLI(BaseCLI):
     def sample_attr(self, attr: str, nb_groups: int = 1, nb_samples: int = 1) -> np.ndarray:
         """
         Samples an attribute of the cli to the required scalar or uniform distribution.
-        :value attr: Attribute of the CLI to parse.
-        :return parsed_attr: Returns the appropriate sampled argument.
+
+        An example of the sampling method applied to an attribute is as follows. Let the attribute of interest be
+        named x. If the value of x is a single value in a list, say x=[0.8], then this method will return the
+        zero-dimensional numpy array: array(0.8). If instead two values of present, say x=[0, 1], then x is sampled
+        from the uniform distribution x ~ U(0, 1). If the parameters metadata allows for appending, then x will be a
+        list of lists, say x=[[0.8, 0.9], [0, 1]]. In this case the sampling algorithm is applied to each value within
+        the list, leading to a concatenated array x ~ [U(0.8, 0.9), U(0, 1)].
+
+        Parameters
+        ----------
+        attr: str
+            Attribute of the CLI to parse.
+
+        nb_groups: int, default=1
+            Number of population groups from which to define the size of the uniform distribution.
+
+        nb_samples: int, default=1
+            Number of samples to take from the uniform distribution.
+
+        Returns
+        -------
+        out: np.ndarray
+            Returns either a zero dimensional float as an numpy array, or a numpy array of size (nb_groups, nb_samples).
+            If the attributes metadata allows appending, then instead the method is applied to each element in the list
+            of appended values, returning an array of shape (n, nb_samples), where n is the number of appended elements.
         """
         attr_val = getattr(self, attr)
         try:
@@ -98,7 +168,7 @@ class BaseDistributionCLI(BaseCLI):
                     and issubclass(self.__dataclass_fields__[attr].type.__origin__, List)
             ):
                 if self.__dataclass_fields__[attr].metadata.get('action', None) == 'append':
-                    return np.asarray([[_sample_cli_attr(x, nb_groups, nb_samples)] for x in attr_val])
+                    return np.concatenate([_sample_cli_attr(x, 1, nb_samples) for x in attr_val], axis=0)
                 return np.asarray(_sample_cli_attr(attr_val, nb_groups, nb_samples))
             return attr_val
         except Exception as e:
@@ -107,6 +177,10 @@ class BaseDistributionCLI(BaseCLI):
 
 @dataclass
 class LockdownCLI(BaseDistributionCLI):
+    """
+    Lockdown CLI. Used to define the periods of various phases of a lockdown, as well as the relative strength of the
+    effects. Any number of lockdown periods and strengths can be defined.
+    """
 
     _defaults_dict = {
         'rel_beta_lockdown': REL_BETA_LOCKDOWN_DEFAULT,
@@ -128,13 +202,42 @@ class LockdownCLI(BaseDistributionCLI):
         default=None,
         metadata={
             "help": "Length of each period for which the relative beta's apply, in days, after the start of lockdown."
-                    " Can be called multiple times to define multiple successive lockdown periods occuring one after "
+                    " Can be called multiple times to define multiple successive lockdown periods occurring one after "
                     "the other.",
             "action": "append"
         }
     )
 
+    def __post_init__(self):
+        assert len(self.rel_beta_period) == len(self.rel_beta_lockdown), \
+            f"There should be a one-to-one correspondence between the number of lockdown periods and the strengths of " \
+            f"each of the lockdown periods. Instead found {len(self.rel_beta_period)} number of lockdown periods " \
+            f"and {len(self.rel_beta_lockdown)} number of lockdown strengths."
+
     def sample_attr(self, attr: str, nb_groups: int = 1, nb_samples: int = 1) -> List[np.ndarray]:
+        """
+        Overrides the base sample_attr method to suit the needs of the lockdown parameters. Since lockdowns can have
+        various strengths, and may have more certain periods than others, the output of this sampling method is to
+        produce a variable list of numpy arrays, rather than a single numpy array.
+
+        Parameters
+        ----------
+        attr: str
+            The attribute to sample.
+
+        nb_groups: int, default=1
+            The number of population groups to sample for.
+
+        nb_samples: int, default=1
+            The number of samples to take.
+
+        Returns
+        -------
+        out: list
+            List of numpy arrays. If the parsed value contained a single element, then a zero dimensional array is
+            returned in its place, otherwise a set of samples is given from a uniform distribution defined by the bounds
+            of the parsed value.
+        """
         attr_val = getattr(self, attr)
         outputs = [_sample_cli_attr(attr_val[0], nb_groups, nb_samples)]
         for i in range(1, len(attr_val)):
@@ -151,6 +254,9 @@ class LockdownCLI(BaseDistributionCLI):
 
 @dataclass
 class OdeParamCLI(BaseDistributionCLI):
+    """
+    Command line interface for all parameters relating to the Assa Covid SEIR ordinary differential equation.
+    """
 
     _defaults_dict = {
         'r0': R0_DEFAULT,
@@ -341,23 +447,12 @@ class OdeParamCLI(BaseDistributionCLI):
 
 
 @dataclass
-class Y0CLI(BaseDistributionCLI):
-
-    _defaults_dict = {
-        'prop_e0': PROP_E0_DEFAULT
-    }
-
-    prop_e0: List[float] = list_field(
-        default=None,
-        metadata={
-            "help": "Proportion of starting population in the exposed category. Used to seed the SEIR model. Defaults "
-                    "to a Uniform prior U(0, 1e-6). Single attr defines a scalar, two inputs define a Uniform prior."
-        }
-    )
-
-
-@dataclass
 class MetaCLI(BaseCLI):
+    """
+    Command line interface that stores any meta data about the system we are solving, such as the number of samples
+    the ode is taking, as well as whether or not the model should incorporate an age heterogenous structure. The age
+    heterogeneity is introduced by means of 10 year age bands.
+    """
 
     nb_samples: Optional[int] = field(
         default=NB_SAMPLES_DEFAULT,
@@ -382,6 +477,9 @@ class MetaCLI(BaseCLI):
 
 @dataclass
 class FittingCLI(BaseCLI):
+    """
+    Command line interface for all fitting parameters used by the model.
+    """
 
     nb_runs: Optional[int] = field(
         default=NB_RUNS_DEFAULT,
