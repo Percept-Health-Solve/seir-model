@@ -41,7 +41,7 @@ def list_field(default=None, metadata=None):
 
 def _sample_cli_attr(attr, nb_groups, nb_samples) -> np.ndarray:
     if len(attr) == 1:
-        return np.asarray(attr[0])
+        return np.expand_dims(np.asarray(attr[0]), axis=(0, 1))
     elif len(attr) == 2:
         return np.random.uniform(attr[0], attr[1], size=(nb_groups, nb_samples))
     else:
@@ -209,6 +209,7 @@ class LockdownCLI(BaseDistributionCLI):
     )
 
     def __post_init__(self):
+        super().__post_init__()
         assert len(self.rel_beta_period) == len(self.rel_beta_lockdown), \
             f"There should be a one-to-one correspondence between the number of lockdown periods and the strengths of " \
             f"each of the lockdown periods. Instead found {len(self.rel_beta_period)} number of lockdown periods " \
