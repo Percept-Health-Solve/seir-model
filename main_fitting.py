@@ -224,7 +224,9 @@ def main():
             'critical': solution.critical.data,
             'infected': solution.infected.data,
             'deaths': solution.deaths.data,
-            'attack_rate': np.sum(solution.infected.data, axis=1) / np.sum(y0, axis=(0, 1))
+            'attack_rate': np.sum(solution.infected.data, axis=1) / np.sum(y0, axis=(0, 1)),
+            'e0': e0,
+            'y0': y0
         }
         posterior_dict = fitter.get_posterior_samples(**prior_dict)
 
@@ -233,7 +235,7 @@ def main():
 
         fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
                                           ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
-                                           'mortality_loading', 'hospital_loading'])
+                                           'mortality_loading', 'hospital_loading', 'e0'])
         plt.tight_layout()
         fig.savefig(output_cli.run_path.joinpath(f'run{run:02}_prior_posterior.png'))
 
@@ -243,7 +245,7 @@ def main():
 
     fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
                                       ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
-                                       'mortality_loading', 'hospital_loading'])
+                                       'mortality_loading', 'hospital_loading', 'e0'])
     plt.tight_layout()
     fig.savefig(output_cli.output_path.joinpath(f'prior_posterior.png'))
 
