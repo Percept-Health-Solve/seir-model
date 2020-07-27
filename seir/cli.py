@@ -30,8 +30,7 @@ from seir.defaults import (
     TIME_C_TO_D_DEFAULT,
     CONTACT_K_DEFAULT,
     HOSPITAL_LOADING_DEFAULT,
-    MORTALITY_LOADING_DEFAULT,
-    PROP_E0_DEFAULT
+    MORTALITY_LOADING_DEFAULT
 )
 
 
@@ -441,8 +440,8 @@ class OdeParamCLI(BaseDistributionCLI):
     hospital_loading: List[float] = list_field(
         default=None,
         metadata={
-            "help": "Hospital loading parameter applied to deaths. Used to pseudo inform the uncertainty in these"
-                    "parameters while keeping the shape of those going to hospital over age groups constant."
+            "help": "Hospital loading parameter applied to in bound patients. Used to pseudo inform the uncertainty "
+                    "in these parameters while keeping the shape of those going to hospital over age groups constant."
         }
     )
 
