@@ -32,8 +32,9 @@ python main_fitting.py --fit_deaths --fit_daily --fit_interval 3 --output_dir ./
 ```
 To fit to provincial deaths, for example the western cape, run
 ```buildoutcfg
-python main_fitting.py --fit_deaths --fit_daily --fit_interval --province WC --output_dir ./results/WC
+python main_fitting.py --fit_deaths --fit_daily --fit_interval --data_source dsfsi/wc --output_dir ./results/WC
 ```
+**Warning:** The default run may take over 10 minutes to complete.
 
 The parameters for these runs are explained below.
 
@@ -118,4 +119,6 @@ The output of the model is sent to the directory given by `--output_dir`. These 
 - `projections_total.csv`: Daily projections of the total infected, deaths, hospitalised, and critical cases, from 2020-02-06 to 2021-01-20. 
 - `runs/` folder: Contains the results from each individual run.
 - `*.pkl` files: Python pickle files that contain the raw numpy arrays of the prior and posterior sample distributions. Useful for meta analysis later.
+
+
 
