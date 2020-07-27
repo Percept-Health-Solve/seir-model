@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import json
 import pickle
+import datetime
 
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
@@ -19,11 +20,54 @@ from seir.fitting import BayesSIRFitter
 
 
 @dataclass
+class DataCLI(BaseCLI):
+
+    data_source: str = field(
+        default='dsfsi/total',
+        metadata={
+            "help": "Selects the data source for the fitting procedure. If a csv file, it will look for a deaths, "
+                    "hospitalised, critical, infected, and recovered column and fit the output of the model to those "
+                    "(if selected for fitting). Can also (and by default) point to dsfsi/<province> to load the DSFSI "
+                    "data."
+        }
+    )
+
+    min_date: str = field(
+        default=None,
+        metadata={
+            "help": "Minimum date from which to fit. Can help reduce noise due to early reporting faults."
+        }
+    )
+
+    max_date: str = field(
+        default=None,
+        metadata={
+            "help": "Maximum date from which to fit. Can help reduce noise at the end of reported data, due to lag."
+        }
+    )
+
+    min_date_dt: datetime.datetime = field(init=False)
+    max_date_dt: datetime.datetime = field(init=False)
+    dsfsi_province: str = field(default=None, init=False)
+    mode: str = field(default=None, init=False)
+
+    def __post_init__(self):
+        if self.data_source.split('/')[0] == 'dsfsi':
+            self.mode = 'dsfsi'
+            if len(self.data_source.split('/')) == 1:
+                self.dsfsi_province = 'total'
+            else:
+                province = self.data_source.split('/')[1]
+                self.dsfsi_province = province.upper() if not province.lower() == 'total' else province.lower()
+        self.min_date_dt = pd.to_datetime(self.min_date, format='%Y/%m/%d') if self.min_date is not None else None
+        self.max_date_dt = pd.to_datetime(self.max_date, format='%Y/%m/%d') if self.max_date is not None else None
+
+
+@dataclass
 class InitialCLI(BaseDistributionCLI):
     _defaults_dict = {
         't0': -50,
-        'prop_e0': [0, 1e-5],
-        'province': 'total'
+        'prop_e0': [0, 1e-5]
     }
 
     t0: int = field(
@@ -39,16 +83,6 @@ class InitialCLI(BaseDistributionCLI):
             "help": "Proportion of exposed individuals at t0. Used to seed the SEIR model."
         }
     )
-
-    province: str = field(
-        default='total',
-        metadata={
-            "help": "Provincial code for SA province, or 'total' for national data."
-        }
-    )
-
-    def __post_init__(self):
-        self.province = self.province.upper() if not self.province.lower() == 'total' else self.province.lower()
 
 
 @dataclass
@@ -181,19 +215,23 @@ def process_runs(run_path: Path, nb_runs: int) -> dict:
 
 def main():
     sns.set(style='darkgrid')
-    argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, OutputCLI])
-    meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli = argparser.parse_args_into_dataclasses()
+    argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, OutputCLI, DataCLI])
+    meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_args_into_dataclasses()
     save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli],
                            directory=output_cli.output_path)
 
-    df_pop = pd.read_csv('data/sa_age_band_population.csv')
-    population_band = df_pop[initial_cli.province].values
-    if not meta_cli.age_heterogeneity:
-        population_band = np.sum(population_band)
-    population_band = np.expand_dims(population_band, axis=1)
+    if data_cli.mode == 'dsfsi':
+        df_pop = pd.read_csv('data/sa_age_band_population.csv')
+        population_band = df_pop[data_cli.dsfsi_province].values
+        if not meta_cli.age_heterogeneity:
+            population_band = np.sum(population_band)
+        population_band = np.expand_dims(population_band, axis=1)
 
-    data = DsfsiData(province=initial_cli.province,
-                     filter_kwargs={'min_date': pd.to_datetime('2020/04/05', format='%Y/%m/%d')})
+        data = DsfsiData(province=data_cli.dsfsi_province,
+                         filter_kwargs={'min_date': data_cli.min_date_dt,
+                                        'max_date': data_cli.max_date_dt})
+    else:
+        raise NotImplementedError('We currently do not support loading data from other csvs. This will be added soon.')
 
     all_solutions = None
     for run in range(fitting_cli.nb_runs):
@@ -242,6 +280,9 @@ def main():
     prior_dict = process_runs(output_cli.run_path, fitting_cli.nb_runs)
     fitter = BayesSIRFitter(all_solutions, data, FittingParams.from_cli(fitting_cli))
     posterior_dict = fitter.get_posterior_samples(**prior_dict)
+
+    pickle.dump(prior_dict, output_cli.output_path.joinpath(f'prior_dict.pkl').open('wb'))
+    pickle.dump(posterior_dict, output_cli.output_path.joinpath(f'posterior_dict.pkl').open('wb'))
 
     fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
                                       ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
