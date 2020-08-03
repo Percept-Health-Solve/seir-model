@@ -28,11 +28,11 @@ pip install -r requirements.txt
 ## Quick Start
 Ensure that you are in the root directory of the model. To run the model, fitting to national death data, run
 ```buildoutcfg
-python main_fitting.py --fit_deaths --fit_daily --fit_interval 3 --output_dir ./results/national
+python main_fitting.py --fit_deaths --fit_daily --fit_interval 3 --data_source dsfsi/total --output_dir ./results/national
 ```
 To fit to provincial deaths, for example the western cape, run
 ```buildoutcfg
-python main_fitting.py --fit_deaths --fit_daily --fit_interval --data_source dsfsi/wc --output_dir ./results/WC
+python main_fitting.py --fit_deaths --fit_daily --fit_interval 3 --data_source dsfsi/wc --output_dir ./results/WC
 ```
 **Warning:** The default run may take over 10 minutes to complete.
 
