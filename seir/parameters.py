@@ -48,7 +48,6 @@ class BaseParams:
 
         return obj
 
-
     def to_pkl(self, fp: Union[str, Path]):
         if isinstance(fp, str):
             fp = Path(fp)

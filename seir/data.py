@@ -31,6 +31,7 @@ class CovidData:
     infected: Union[None, TimestampData] = None
     hospitalised: Union[None, TimestampData] = None
     critical: Union[None, TimestampData] = None
+    lockdown_date: datetime.datetime = field(init=False)
 
     def __post_init__(self):
         self._assert_shapes()
@@ -104,7 +105,6 @@ class CovidData:
 
         return pd.DataFrame.from_dict(convert).transpose()
 
-
     def plot(self,
              axes: List[plt.axes] = None,
              plot_daily_deaths: bool = True,
@@ -115,7 +115,7 @@ class CovidData:
              timestamp_shift: Union[datetime.datetime, float, int] = None,
              plot_fmt=None,
              plot_kwargs=None):
-        req_plots = 5
+        req_plots = 4
         if plot_daily_deaths:
             req_plots += 1
         if plot_daily_infected:
@@ -137,8 +137,8 @@ class CovidData:
         if not isinstance(plot_fmt, list):
             plot_fmt = [plot_fmt]
 
-        titles = ['Deaths', 'Critical Care Need', 'Hospital Need', 'Infected', 'Recovered']
-        data = [self.deaths, self.critical, self.hospitalised, self.infected, self.recovered]
+        titles = ['Deaths', 'Critical Care Need', 'Hospital Need', 'Infected']  # missing recovered
+        data = [self.deaths, self.critical, self.hospitalised, self.infected]
         plot_data = [x.data if x is not None else None for x in data]
         times = [x.timestamp if x is not None else None for x in data]
         if group_total:
@@ -151,10 +151,10 @@ class CovidData:
             plot_data.append(np.diff(plot_data[3], axis=0) / np.expand_dims(np.diff(times[3]), axis=(1, 2)))
             times.append(times[3][1:])
             titles.append('Daily Infected')
-        if plot_daily_recovered and data[4] is not None:
-            plot_data.append(np.diff(plot_data[4], axis=0) / np.expand_dims(np.diff(times[4]), axis=(1, 2)))
-            times.append(times[4][1:])
-            titles.append('Daily Recovered')
+        # if plot_daily_recovered and data[4] is not None:
+        #     plot_data.append(np.diff(plot_data[4], axis=0) / np.expand_dims(np.diff(times[4]), axis=(1, 2)))
+        #     times.append(times[4][1:])
+        #     titles.append('Daily Recovered')
 
         if timestamp_shift is not None:
             if isinstance(timestamp_shift, datetime.datetime):
@@ -164,6 +164,8 @@ class CovidData:
                 times = [x + timestamp_shift if x is not None else None for x in times]
 
         for i, ax in enumerate(axes.flat):
+            if i >= len(times):
+                break
             x = times[i]
             y = plot_data[i]
             ax.set_title(titles[i])
@@ -181,6 +183,77 @@ class CovidData:
                 tick.set_rotation(45)
 
         return axes
+
+    @classmethod
+    def from_csv(cls,
+                 data_fp: Union[str, Path],
+                 lockdown_date: datetime.datetime = None,
+                 date_col: str = 'date',
+                 death_col: str = 'deaths',
+                 recovery_col: str = 'recovered',
+                 infected_col: str = 'infected',
+                 hospital_col: str = 'hospitalisations',
+                 critical_col: str = 'critical',
+                 filter_kwargs: dict = None):
+        if filter_kwargs is None:
+            filter_kwargs = {}
+        if not isinstance(data_fp, Path):
+            data_fp = Path(data_fp)
+
+        assert data_fp.is_file()
+
+        df_data = pd.read_csv(data_fp, parse_dates=[date_col])
+
+        df_death = df_data[[date_col, death_col]] if death_col in df_data.columns else None
+        df_recovery = df_data[[date_col, recovery_col]] if recovery_col in df_data.columns else None
+        df_infected = df_data[[date_col, infected_col]] if infected_col in df_data.columns else None
+        df_hospital = df_data[[date_col, hospital_col]] if hospital_col in df_data.columns else None
+        df_critical = df_data[[date_col, critical_col]] if critical_col in df_data.columns else None
+
+        def df_to_timestamp_data(df):
+            if df is None:
+                return None
+            df = df.dropna()
+
+            min_date = _parse_min_max_date(df, filter_kwargs.get('min_date', None))
+            max_date = _parse_min_max_date(df, filter_kwargs.get('max_date', None))
+
+            if not min_date:
+                min_date = df['date'].min()
+            if not max_date:
+                max_date = df['date'].max()
+
+            df = df[df['date'] >= min_date]
+            df = df[df['date'] <= max_date]
+
+            timestamp = df[date_col]
+            if lockdown_date:
+                timestamp = (timestamp - lockdown_date).dt.days.values
+            timestamp = timestamp
+
+            df = df.drop(columns=[date_col])
+            data = df.astype(int).values
+            data = np.expand_dims(data, axis=2)
+
+            return TimestampData(timestamp, data)
+
+        deaths = df_to_timestamp_data(df_death)
+        recovered = df_to_timestamp_data(df_recovery)
+        infected = df_to_timestamp_data(df_infected)
+        hospitalised = df_to_timestamp_data(df_hospital)
+        critical = df_to_timestamp_data(df_critical)
+
+        out = cls(
+            nb_samples=1,
+            nb_groups=1,
+            deaths=deaths,
+            recovered=recovered,
+            infected=infected,
+            hospitalised=hospitalised,
+            critical=critical
+        )
+        out.lockdown_date = lockdown_date
+        return out
 
 
 def extend_data_samples(a: CovidData, b: CovidData):

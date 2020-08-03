@@ -7,7 +7,7 @@ import pickle
 import datetime
 
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from typing import List, Union, Iterable
 
 from seir.argparser import DataClassArgumentParser
@@ -26,9 +26,27 @@ class DataCLI(BaseCLI):
         default='dsfsi/total',
         metadata={
             "help": "Selects the data source for the fitting procedure. If a csv file, it will look for a deaths, "
-                    "hospitalised, critical, infected, and recovered column and fit the output of the model to those "
-                    "(if selected for fitting). Can also (and by default) point to dsfsi/<province> to load the DSFSI "
-                    "data."
+                    "hospitalised, critical, infected, and recovered columns and fit the output of the model to those "
+                    "(if selected for fitting). Can also point to dsfsi/<province> to load the DSFSI data for a "
+                    "particular province Defaults to dsfsi/total."
+        }
+    )
+
+    population_source: str = field(
+        default=None,
+        metadata={
+            "help": "A csv file containing a column labeled 'ageband' and 'population' that yields the number of "
+                    "people in each ten year age group, from 0-9, 10-19, ..., 80+. This should correspond to the data "
+                    "selected for fitting. NOTE: This is not needed when DSFSI data are selected as the data source."
+        }
+    )
+
+    lockdown_date: str = field(
+        default=None,
+        metadata={
+            "help": "The day of the start of a lockdown period. The model internally computes time values (such as "
+                    "the seeding time t0) relative to this date. Should be in %Y/%m/%d format. This is not needed when "
+                    "DSFSI data is used, as it is set to 2020/03/27)."
         }
     )
 
@@ -46,6 +64,7 @@ class DataCLI(BaseCLI):
         }
     )
 
+    lockdown_date_dt: datetime.datetime = field(init=False)
     min_date_dt: datetime.datetime = field(init=False)
     max_date_dt: datetime.datetime = field(init=False)
     dsfsi_province: str = field(default=None, init=False)
@@ -54,11 +73,20 @@ class DataCLI(BaseCLI):
     def __post_init__(self):
         if self.data_source.split('/')[0] == 'dsfsi':
             self.mode = 'dsfsi'
+            self.lockdown_date = '2020/03/27'
             if len(self.data_source.split('/')) == 1:
                 self.dsfsi_province = 'total'
             else:
                 province = self.data_source.split('/')[1]
                 self.dsfsi_province = province.upper() if not province.lower() == 'total' else province.lower()
+        elif Path(self.data_source).is_file():
+            self.mode = 'file'
+            if not Path(self.population_source).is_file():
+                raise ValueError('--population_source not correctly specified for given data source.')
+        else:
+            raise ValueError('--data_source flag does not point to a dsfsi dataset or a local file.')
+        self.lockdown_date = '2020/03/27' if self.lockdown_date is None else self.lockdown_date
+        self.lockdown_date_dt = pd.to_datetime(self.lockdown_date, format='%Y/%m/%d') if self.lockdown_date is not None else None
         self.min_date_dt = pd.to_datetime(self.min_date, format='%Y/%m/%d') if self.min_date is not None else None
         self.max_date_dt = pd.to_datetime(self.max_date, format='%Y/%m/%d') if self.max_date is not None else None
 
@@ -126,7 +154,10 @@ def save_all_cli_to_config(clis: Union[BaseCLI, Iterable[BaseCLI]], directory: U
         clis = [clis]
     json_data = {}
     for cli in clis:
-        json_data.update(asdict(cli))
+        x = asdict(cli)
+        f = [f.name for f in fields(cli) if f.init]
+        xx = {k: v for k, v in x.items() if k in f}
+        json_data.update(xx)
 
     if isinstance(directory, str):
         directory = Path(directory)
@@ -217,7 +248,7 @@ def main():
     sns.set(style='darkgrid')
     argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, OutputCLI, DataCLI])
     meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_args_into_dataclasses()
-    save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli],
+    save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, data_cli],
                            directory=output_cli.output_path)
 
     if data_cli.mode == 'dsfsi':
@@ -230,8 +261,24 @@ def main():
         data = DsfsiData(province=data_cli.dsfsi_province,
                          filter_kwargs={'min_date': data_cli.min_date_dt,
                                         'max_date': data_cli.max_date_dt})
+    elif data_cli.mode == 'file':
+        data_fp = Path(data_cli.data_source)
+        pop_fp = Path(data_cli.population_source)
+        if data_fp.suffix != '.csv':
+            raise ValueError('Only csv files are supported as data sources')
+        if pop_fp.suffix != '.csv':
+            raise ValueError('Only csv files are supported as population sources')
+
+        df_pop = pd.read_csv(pop_fp, index_col='ageband')
+        population_band = df_pop['population'].values
+        if not meta_cli.age_heterogeneity:
+            population_band = np.sum(population_band)
+        population_band = np.expand_dims(population_band, axis=1)
+        data = CovidData.from_csv(data_fp, lockdown_date=data_cli.lockdown_date_dt,
+                                  filter_kwargs={'min_date': data_cli.min_date_dt,
+                                                 'max_date': data_cli.max_date_dt})
     else:
-        raise NotImplementedError('We currently do not support loading data from other csvs. This will be added soon.')
+        raise NotImplementedError
 
     all_solutions = None
     for run in range(fitting_cli.nb_runs):
@@ -247,7 +294,7 @@ def main():
         if initial_cli.t0 < t.min():
             t = np.concatenate([[initial_cli.t0], t])
 
-        solution, full_sol = solver.solve(y0, t, return_full=True)
+        solution, full_sol = solver.solve(y0, t, return_full=True, exclude_t0=True)
         if all_solutions is None:
             all_solutions = solution
         else:
