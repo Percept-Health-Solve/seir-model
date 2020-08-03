@@ -36,19 +36,21 @@ python main_fitting.py --fit_deaths --fit_daily --fit_interval 3 --data_source d
 ```
 **Warning:** The default run may take over 10 minutes to complete.
 
-The parameters for these runs are explained below.
+The full set of parameters for these runs are explained below.
 
 ## Usage
 ### Fitting
-The model is currently set up to fit to a set of data. By default, this will fit to the [data](https://github.com/dsfsi/covid19za) provided by the [Data Science for Social Impact research group](https://dsfsi.github.io). Fitting is done using a sampling-importance-resampling (S-I-R) algorithm, which makes use of model parameters with a number of samples `M` and take a smaller number of resamples `m`, where the weight of the resample is weighted according to the importance of the output of the initial `M` samples. The importance of the model output against the provided data is modelled by a log-normal distribution. Normally `m/M` is around 1/20.
+The model is currently set up to fit to a set of data. By default, this will fit to the [data](https://github.com/dsfsi/covid19za) provided by the [Data Science for Social Impact research group](https://dsfsi.github.io), which collates data from the South African Department of Health and National Institute for Communicable Diseases. Fitting is done using a sampling-importance-resampling (S-I-R) algorithm, which makes use of model parameters with a number of samples `M` and take a smaller number of resamples `m`, where the weight of the resample is weighted according to the importance of the output of the initial `M` samples. The importance of the model output against the provided data is modelled by a log-normal distribution. Normally `m/M` is around 1/20.
 
 #### Sample and Age Parameters
-These parameters define the number of samples the model will take when solving the SEIR ODEs. The model also allows multiple population groups to be considered, though at the moment the only population group considered are those defined by ten year age bands (from 0-9, 10-19, ..., 80+).
+These parameters define the number of samples the model will take when solving the SEIR ODEs. The model also allows multiple population groups to be considered, though at the moment the only population groups considered are those defined by ten year age bands (from 0-9, 10-19, ..., 80+), and then only after infection (i.e. the model does not allow for age-heterogeneity in transmission or susceptibility).
 - `--nb_samples`: Defines the number of samples in the S-I-R algorithm. Will solve the set of SEIR ODEs X times for each of the sampled parameters.
 - `--no_age_heterogeneity`: Will remove the age heterogeneous population groups from the model's behaviour, and instead fit using age-average statistics for parameters.
 
 #### Data Parameters
-- `--data_source`: Source of data on which to fit. Defauls to the total population data from the DSFSI. Can be constructed to filter for a province, by parsing as `dsfsi/<province>`, where `<province>` is the 2-3 letter code for a South African province. Can also point to a csv file, where it will attempt to find the columns `deaths`, `hospitalised`, `critical`, `infected`, and `recovered` at least one of these should be present) and construct a data object for fitting from that. **The csv feature has yet to be implemented, but is currently being developed.**
+- `--data_source`: Source of data on which to fit. Defauls to the total population data from the DSFSI. Can be constructed to filter for a province, by parsing as `dsfsi/<province>`, where `<province>` is the 2-3 letter code for a South African province. Available codes are: GP, WC, NC, EC, KZN, FS, LP, NW, and MP. Can also point to a csv file, where it will attempt to find the columns `deaths`, `hospitalised`, `critical`, `infected`, and `recovered` at least one of these should be present) and construct a data object for fitting from that.
+- `--population_source`: Should point to a csv file containing two columns: `'ageband'` and `'population'`. The age bands should contain 10 year intervals (from 0-9, 10-19, ..., to 80+), with a corresponding population within that category. **Note:** this is not needed when loading data from the DSFSI.
+- `--lockdown_date`: The lockdown date for the data source. Must be in `%Y/%m/%d` format. Not used when DSFSI data is loaded (as this is set to `2020/03/27`. Defaults to `2020/03/27` if not given. **Note:** all internal operations in the model are calculated with respect to this date. 
 - `--min_date`: Filters out data points before this date. Must be in `%Y/%m/%d` format.
 - `--max_date`: Filters out data points after this date. Must be in `%Y/%m/%d` format.
 
@@ -103,7 +105,7 @@ These parameters define the inner workings of the set of ordinary differential e
 #### Initial Parameters
 These parameters define the initial value of the ODE.
 
-- `--t0`: Initial time of the starting seed. Defaults to 50 days before the lockdown.
+- `--t0`: Initial time of the starting seed, relative to the inital lockdown date. Defaults to -50 (50 days before the first lockdown).
 - `--prop_e0`: The proportion of the population that are exposed at time `t0`. Serves as the seed for the SEIR model. Defaults to a uniform prior U(0, 1e-5).
 
 #### Output Parameters
