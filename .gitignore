@@ -1,3 +1,6 @@
+# sensitive NDA data
+sensitive/
+
 # pytest
 .pytest_cache/
 
