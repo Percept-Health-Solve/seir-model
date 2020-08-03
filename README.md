@@ -59,17 +59,17 @@ The following parameters are available to change the behaviour of the fitting al
 - `--fit_infected`: Fit to cumulative detected infected cases. **Note:** this is not advised, as the model produces asymptomatic and mild cases, whose real world detection rate may be slim to none.
 - `--fit_hospitalised`: Fit to hospitalised cases, if available. Not available for DSFSI data.
 - `--fit_critical`: Fit to critical care cases, if available. Not available for DSFSI data.
-- `--fit_deaths`: Fit to cumulative deaths, if available.
+- `--fit_deaths`: Fit to cumulative deaths (or new periodic deaths, if the fit daily below is specified), if available.
 - `--fit_recovered`: Fit to cumulative recovered cases, if available. Note that the ASSA model currently does not support this feature outside of cases that have been discharged from hospital.
-- `--fit_daily`: Will fit to daily infected/recovered/death cases instead of cumulative cases. Used to remove the serial independance of the data.
-- `--fit_interval`: Only fit to data every X intervals, in days. If fit_daily is set, it will add the data in within this interval in order to help mitigate noise due to daily reporting inaccuracies.
+- `--fit_daily`: Will fit to daily infected/recovered/death cases instead of cumulative cases. Used to remove the serial independence of the data.
+- `--fit_interval`: Only fit to data every X intervals, in days. If fit_daily is set, it will sum observations within this interval in order to help mitigate noise due to daily reporting inaccuracies.
 - `--nb_runs`: The number of runs the model takes (defaults to 1). Used to increase the number of random samples within the model while avoiding memory issues.
-- `--ratio_resample`: The ratio of resamples to take in the S-I-R algorithm. Defaults to `1/20=0.5`.
+- `--ratio_resample`: The ratio of resamples to take in the S-I-R algorithm. Defaults to `1/20=0.05`.
 
 #### Lockdown Parameters
-You can define a lockdown (a decrease in its transmissibility, or in its Rt value) of the disease and its length using these parameters.
+Users can define periods of lower transmissibility than the unmitigated baseline using the parameters below. Note that these do not necessarily reflect periods of lockdown buy may simply reflect the efects of citizen behaviour and NPIs.
 
-- `--rel_beta_lockdown`: Defines either a single value, or bounds of a uniform distribution, that scale the strength of the infectious beta parameter (where beta is the number of people an infectious person is expected to infect on average, related to Rt) during a lockdown. The lower bound of a uniform distribution can be set to a negative value, implying that the lower bound will be determined by the previous lockdown's strength (to within the negative value given). The upper bound can also be a negative value, implying the upper bound of the uniform distribution will be informed by the strength of the previous lockdown (added by the value set).
+- `--rel_beta_lockdown`: Defines either a single value, or bounds of a uniform distribution, that multiplicatively scale the strength of the infectious beta parameter (where beta is the number of people an infectious person is expected to infect on average on each day of infectiousness assuming a fully susceptible population) during a lockdown. The lower bound of a uniform distribution can be set to a negative value, implying that the lower bound will be determined by the previous lockdown's strength. Suppose for exaple that the lower bound is set to -0.1, and the previous period's relative beta was sampled as 0.6, then the lower bound for this period's relative beta uniform prior will be set to 0.5.
 - `--rel_beta_period`: Defines the length of time (in days) for which the lockdown period defined above will be applied. 
 
  These parameters can be called multiple times in order to define successive lockdown periods of varying effectiveness (such as introducing multiple staged lockdowns, as many countries have done). This would be done as follows:
@@ -79,7 +79,7 @@ You can define a lockdown (a decrease in its transmissibility, or in its Rt valu
 This would define an initial lockdown of 30 days, with a uniform prior U(0.5, 0.9) (acting on the infectivity strength of a no lockdown scenario); followed by a second lockdown period of 20 days with a uniform prior U(0.6, 0.7).
 
 #### ODE Parameters
-These parameters define the inner workings of the set of ordinary differential equations underlying the ASSA model. Defaults of these parameters can be found in the `seir/defaults.py` file. All parameters can be set with a single value (defining a float), or two values (defining a uniform prior that is fit to data). Caution should be taken when changing these values, as defaults of many of these parameters have been informed by literature studies and analysis on sensitive data.
+These parameters define the inner workings of the set of ordinary differential equations underlying the ASSA model. Defaults of these parameters can be found in the `seir/defaults.py` file. All parameters can be set with a single value (defining a float), or two values (defining a uniform prior that is fit to data). Caution should be taken when changing these values, as defaults of many of these parameters have been informed by literature studies and analysis on sensitive data. The time values all represent the mean duration for the specified transition.
 
 - `--r0`: The number of secondary infections expected to occur due to a single infected individual.
 - `--rel_beta_asymptomatic`: The relative infectiousness strength of asymptomatic individuals.
@@ -98,9 +98,9 @@ These parameters define the inner workings of the set of ordinary differential e
 - `--time_h_to_d`: Time from general hospital admission to death, for those that will die.
 - `--time_c_to_r`: Time from critical care admission to recovery, for those that will recover.
 - `--time_c_to_d`: Time from critical care admission to death, for those that will die.
-- `--contact_k`: Contact heterogeneity factor as per Kong et. al. A value of 0 or lower removes contact heterogeneity from the system.
-- `--mortality_loading`: Adjusts the mortality proportions of the model while keeping the overall mortality shape vy age the same. Used to inform the uncertainty in the mortality estimates while ensuring the mortality by age remains sensible. Should be close to 1.
-- `--hospital_loading`: Adjusts the proportions of individuals going to hospital, while keeping the proportions by age constant within the hospital. Used to inform the uncertainty in inbound patients while ensuring the inbound patient distribution remains sensible. Should be close to 1.
+- `--contact_k`: Contact heterogeneity factor as per Kong et. al. [1]. A value of 0 or lower removes contact heterogeneity from the system.
+- `--mortality_loading`: Adjusts the relative overall mortality level of the model while keeping the overall mortality shape vy age the same. Used to inform the uncertainty in the mortality estimates while ensuring the mortality by age remains sensible. The interval between the upper and lower bounds should be close to and include 1.
+- `--hospital_loading`: Adjusts the proportions of individuals going to hospital, while keeping the proportions by age constant within the hospital. Used to inform the uncertainty in inbound patients while ensuring the inbound patient distribution remains sensible. The interval between the upper and lower bounds should be close to and include 1.
 
 #### Initial Parameters
 These parameters define the initial value of the ODE.
@@ -121,6 +121,9 @@ The output of the model is sent to the directory given by `--output_dir`. These 
 - `projections_total.csv`: Daily projections of the total infected, deaths, hospitalised, and critical cases, from 2020-02-06 to 2021-01-20. 
 - `runs/` folder: Contains the results from each individual run.
 - `*.pkl` files: Python pickle files that contain the raw numpy arrays of the prior and posterior sample distributions. Useful for meta analysis later.
+
+### References
+[1] Kong, L., Wang, J., Han, W., & Cao, Z. (2016). Modeling heterogeneity in direct infectious disease transmission in a compartmental model. International Journal of Environmental Research and Public Health, 13(3). https://doi.org/10.3390/ijerph13030253
 
 
 
