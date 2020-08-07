@@ -102,7 +102,7 @@ class CovidSeirODE(BaseODE):
         y = np.asarray(y)
         if y.ndim == 1:
             assert y.size == self.nb_states * self.nb_groups * self.nb_samples
-            y = y.reshape(self.nb_states, self.nb_groups, self.nb_samples)
+            y = y.reshape((self.nb_states, self.nb_groups, self.nb_samples))
         assert y.shape == (self.nb_states, self.nb_groups, self.nb_samples), \
             f"Given y to ode does not match intended shape. Should have shape ({self.nb_states}, " \
             f"{self.meta_params.nb_groups}, {self.meta_params.nb_samples}), got {y.shape} instead."
