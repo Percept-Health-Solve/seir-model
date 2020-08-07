@@ -164,7 +164,7 @@ class DataClassArgumentParser(ArgumentParser):
         data = json.loads(Path(json_file).read_text())
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in data.items() if k in keys}
             obj = dtype(**inputs)
             outputs.append(obj)
