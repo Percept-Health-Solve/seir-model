@@ -917,7 +917,10 @@ def calculate_resample(t_obs,
     percentile_vars['e0'] = e0[[arg_25, arg_med, arg_975]]
 
     mort_loading = resample_vars['prop_h_to_d'] / np.array([[0.011, 0.042, 0.045, 0.063, 0.096, 0.245, 0.408, 0.448, 0.526]])
+    prop_s_base = np.array([[0.005, 0.0025, 0.0167, 0.0317, 0.0501, 0.0768, 0.0927, 0.1236, 0.1637]])
+    hospital_loading = (1 - resample_vars['prop_m'] / (1 - scalar_vars['prop_a'])) / prop_s_base
     percentile_vars['mort_loading'] = mort_loading[[arg_25, arg_med, arg_975]]
+    percentile_vars['hospital_loading'] = hospital_loading[[arg_25, arg_med, arg_975]]
 
     # reshape this for converting to a df
     df_percentiles = pd.DataFrame(index=range(3))
