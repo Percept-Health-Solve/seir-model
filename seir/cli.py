@@ -242,7 +242,7 @@ class LockdownCLI(BaseDistributionCLI):
         outputs = [_sample_cli_attr(attr_val[0], nb_groups, nb_samples)]
         for i in range(1, len(attr_val)):
             if len(attr_val[i]) == 1:
-                outputs.append(np.asarray(attr_val[i][0]))
+                outputs.append(_sample_cli_attr(attr_val[i], nb_groups, nb_samples))
             elif len(attr_val[i]) == 2:
                 if attr_val[i][0] < 0:
                     outputs.append(np.random.uniform(outputs[i-1] - abs(attr_val[i][0]), attr_val[i][1],
