@@ -31,7 +31,7 @@ class CovidData:
     infected: Union[None, TimestampData] = None
     hospitalised: Union[None, TimestampData] = None
     critical: Union[None, TimestampData] = None
-    lockdown_date: datetime.datetime = field(init=False)
+    lockdown_date: datetime.datetime = field(init=False, repr=False)
 
     def __post_init__(self):
         self._assert_shapes()
