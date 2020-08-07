@@ -24,7 +24,7 @@ class BayesSIRFitter:
 
     @property
     def nb_resamples(self):
-        return int(self.params.ratio_resample * self.model.nb_samples)
+        return max(int(self.params.ratio_resample * self.model.nb_samples), 1)
 
     def __post_init__(self):
         assert self.truth.nb_samples == 1 or self.truth.nb_samples == self.model.nb_samples
