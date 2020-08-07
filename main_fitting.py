@@ -95,7 +95,8 @@ class DataCLI(BaseCLI):
 class InitialCLI(BaseDistributionCLI):
     _defaults_dict = {
         't0': -50,
-        'prop_e0': [0, 1e-5]
+        'prop_e0': [0, 1e-5],
+        'prop_immune': [0],
     }
 
     t0: int = field(
@@ -106,18 +107,32 @@ class InitialCLI(BaseDistributionCLI):
     )
 
     prop_e0: List[float] = field(
-        default_factory=lambda: [0, 1e-5],
+        default_factory=lambda: None,
         metadata={
             "help": "Proportion of exposed individuals at t0. Used to seed the SEIR model."
         }
     )
 
+    prop_immune: List[float] = field(
+        default_factory=lambda: None,
+        metadata={
+            "help": "Proportion of initial population who are immune to the disease and will never contract it."
+        }
+    )
+
 
 @dataclass
-class OutputCLI:
+class InputOutputCLI:
+
+    from_config: str = field(
+        default=None,
+        metadata={
+            "help": "Load parameter values from a config file instead of the command line"
+        }
+    )
 
     output_dir: str = field(
-        default='./results',
+        default=None,
         metadata={
             "help": "Location to place output files"
         }
@@ -134,12 +149,15 @@ class OutputCLI:
     run_path: Path = field(init=False)
 
     def __post_init__(self):
+        if self.output_dir is None:
+            self.output_dir = './results'
         self.output_path = Path(self.output_dir)
         if not self.output_path.is_dir():
             self.output_path.mkdir()
         if (
             self.output_path.is_dir()
             and any(self.output_path.iterdir())
+            and not self.from_config
             and not self.overwrite
         ):
             raise ValueError('Detected files in output directory. Define a new output directory or use --overwrite to '
@@ -149,13 +167,15 @@ class OutputCLI:
             self.run_path.mkdir()
 
 
-def save_all_cli_to_config(clis: Union[BaseCLI, Iterable[BaseCLI]], directory: Union[str, Path]):
+def save_all_cli_to_config(clis: Union[BaseCLI, Iterable[BaseCLI]], directory: Union[str, Path], exclude: list = None):
+    if exclude is None:
+        exclude = []
     if isinstance(clis, BaseCLI):
         clis = [clis]
     json_data = {}
     for cli in clis:
         x = asdict(cli)
-        f = [f.name for f in fields(cli) if f.init]
+        f = [f.name for f in fields(cli) if f.init and f.name not in exclude]
         xx = {k: v for k, v in x.items() if k in f}
         json_data.update(xx)
 
@@ -246,10 +266,12 @@ def process_runs(run_path: Path, nb_runs: int) -> dict:
 
 def main():
     sns.set(style='darkgrid')
-    argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, OutputCLI, DataCLI])
+    argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, InputOutputCLI, DataCLI])
     meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_args_into_dataclasses()
-    save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, data_cli],
-                           directory=output_cli.output_path)
+    if output_cli.from_config:
+        meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_json_file(output_cli.from_config)
+    save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli],
+                           directory=output_cli.output_path, exclude=['from_config'])
 
     if data_cli.mode == 'dsfsi':
         df_pop = pd.read_csv('data/sa_age_band_population.csv')
@@ -283,12 +305,15 @@ def main():
     all_solutions = None
     for run in range(fitting_cli.nb_runs):
         ode_prior = CovidSeirODE.sample_from_cli(meta_cli, lockdown_cli, ode_cli)
+        print(ode_prior)
         solver = ScipyOdeIntSolver(ode_prior)
 
         y0 = np.zeros((ode_prior.nb_states, ode_prior.nb_groups, ode_prior.nb_samples))
         e0 = initial_cli.sample_attr('prop_e0', nb_samples=ode_prior.nb_samples)
         y0[1] = e0 * population_band
         y0[0] = (1 - e0) * population_band
+        prop_immune = initial_cli.sample_attr('prop_immune', nb_samples=ode_prior.nb_samples)
+        y0 = y0 * (1 - prop_immune)
 
         t = np.arange(max(data.all_timestamps().min(), initial_cli.t0), data.all_timestamps().max()+1)
         if initial_cli.t0 < t.min():
@@ -309,9 +334,10 @@ def main():
             'critical': solution.critical.data,
             'infected': solution.infected.data,
             'deaths': solution.deaths.data,
-            'attack_rate': np.sum(solution.infected.data, axis=1) / np.sum(y0, axis=(0, 1)),
+            'attack_rate': np.sum(solution.infected.data, axis=1) / np.sum(y0 / (1 - prop_immune), axis=(0, 1)),
             'e0': e0,
-            'y0': y0
+            'y0': y0,
+            'prop_immune': prop_immune
         }
         posterior_dict = fitter.get_posterior_samples(**prior_dict)
 
@@ -338,10 +364,10 @@ def main():
     fig.savefig(output_cli.output_path.joinpath(f'prior_posterior.png'))
 
     posterior_solution = CovidData(nb_groups=posterior_dict['nb_groups'], nb_samples=posterior_dict['nb_samples'],
-                                   deaths=TimestampData(t, posterior_dict['deaths']),
-                                   hospitalised=TimestampData(t, posterior_dict['hospitalised']),
-                                   critical=TimestampData(t, posterior_dict['critical']),
-                                   infected=TimestampData(t, posterior_dict['infected']))
+                                   deaths=TimestampData(t[1:], posterior_dict['deaths']),
+                                   hospitalised=TimestampData(t[1:], posterior_dict['hospitalised']),
+                                   critical=TimestampData(t[1:], posterior_dict['critical']),
+                                   infected=TimestampData(t[1:], posterior_dict['infected']))
 
     ode_post = CovidSeirODE.from_dict(posterior_dict)
     solve_post = ScipyOdeIntSolver(ode_post)
