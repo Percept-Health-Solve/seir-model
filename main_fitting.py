@@ -51,7 +51,7 @@ class DataCLI(BaseCLI):
     )
 
     min_date: str = field(
-        default=None,
+        default='2020/04/05',
         metadata={
             "help": "Minimum date from which to fit. Can help reduce noise due to early reporting faults."
         }
@@ -305,7 +305,6 @@ def main():
     all_solutions = None
     for run in range(fitting_cli.nb_runs):
         ode_prior = CovidSeirODE.sample_from_cli(meta_cli, lockdown_cli, ode_cli)
-        print(ode_prior)
         solver = ScipyOdeIntSolver(ode_prior)
 
         y0 = np.zeros((ode_prior.nb_states, ode_prior.nb_groups, ode_prior.nb_samples))
