@@ -1,0 +1,4 @@
+name,country,contents,source
+dsfsi,ZAR,deaths,https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_deaths.csv
+dsfsi,ZAR,recoveries,https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_recoveries.csv
+dsfsi,ZAR,detected,https://raw.githubusercontent.com/dsfsi/covid19za/master/data/covid19za_provincial_cumulative_timeline_confirmed.csv

@@ -63,13 +63,13 @@ def durn(start,end,max):
 
 
 def km_estimate(df, fig_path='data/KM_estimates.png', csv_path='data/durations.csv'):
-    # calculate observed mortality rates for weighting right-censored data
+    # calculate truth mortality rates for weighting right-censored data
     death_rate_hosp = df[(df['admission_status'] == 'Died') & (df['Admitted_to_ICU'] == 'No')].shape[0] / \
                       df[(df['admission_status'] != 'Inpatient') & (df['Admitted_to_ICU'] == 'No')].shape[0]
     death_rate_icu = df[(df['admission_status'] == 'Died') & (df['Admitted_to_ICU'] == 'Yes')].shape[0] / \
                      df[(df['admission_status'] != 'Inpatient') & (df['Admitted_to_ICU'] == 'Yes')].shape[0]
 
-    # initialise duration, observed (Boolean) and weight lists
+    # initialise duration, truth (Boolean) and weight lists
     n = df.shape[0]
     durn_hosp_to_discharge = [0] * n
     observed_hosp_to_discharge = [False] * n

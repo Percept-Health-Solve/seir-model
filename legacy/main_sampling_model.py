@@ -74,8 +74,6 @@ parser.add_argument('--mort_loading_range', default=[0.9, 1.1], type=float, narg
 
 parser.add_argument('--log_to_file', type=str, default='', help="Log to a file. If empty, logs to stdout instead.")
 parser.add_argument('--prop_immune', type=float, default=0)
-parser.add_argument('--hospital_loading_range', type=float, nargs=2, default=[0.9, 1.1],
-                    help='Hospital loading uniform prior range')
 
 
 def main():
@@ -278,17 +276,17 @@ def build_and_solve_model(t_obs,
                           args=None,
                           load_prior_file: Path = None,
                           model_base: Path = Path('data/model')):
-    """Build and solve a sampling model, fitting to the given observed variables at the observed time.
+    """Build and solve a sampling model, fitting to the given truth variables at the truth time.
 
-    :param t_obs: Time at which observations are made.
-    :param i_d_obs: Detected observed cases.
-    :param i_h_obs: Hospitalised observed cases.
-    :param i_icu_obs: ICU observed cases.
-    :param d_icu_obs: Deceased observed cases.
-    :param args: Command line arguments.
-    :param total_pop: Total population to consider.
-    :param load_prior_file: Loads proportions from a prior csv file. This should be generated from a previous fit.
-    :param model_base: The model base directory. Defaults to 'data/model', where 'data/' is the output_dir and 'model'
+    :value t_obs: Time at which observations are made.
+    :value i_d_obs: Detected truth cases.
+    :value i_h_obs: Hospitalised truth cases.
+    :value i_icu_obs: ICU truth cases.
+    :value d_icu_obs: Deceased truth cases.
+    :value args: Command line arguments.
+    :value total_pop: Total population to consider.
+    :value load_prior_file: Loads proportions from a prior csv file. This should be generated from a previous fit.
+    :value model_base: The model base directory. Defaults to 'data/model', where 'data/' is the output_dir and 'model'
     is the model name. Saves plots to '{model_base}_priors_posterior.png', and '{model_base}_joint_posterior.png'.
     We also save the models variables to '{model_base}_*.pkl'. See the model documentation for more information on the
     model variables.
@@ -313,7 +311,7 @@ def build_and_solve_model(t_obs,
     time_c_to_d = 13
 
     if not load_prior_file:
-        logging.info('Setting priors')
+        logging.info('Setting priors_params')
         time_infectious = _uniform_from_range(args.time_infectious_range, size=(nb_samples, 1))
         prop_a = _uniform_from_range(args.prop_as_range, size=(nb_samples, 1))
         prop_s_to_h = _uniform_from_range(args.prop_s_to_h_range, size=(nb_samples, 1))
@@ -322,8 +320,8 @@ def build_and_solve_model(t_obs,
         beta = r0 / time_infectious
         rel_lockdown5_beta = _uniform_from_range(args.rel_lockdown5_beta_range, size=(nb_samples, 1))
         rel_lockdown4_beta = np.random.uniform(rel_lockdown5_beta - 0.05, (rel_lockdown5_beta+0.2).clip(max=1), size=(nb_samples, 1))
-        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=1), size=(nb_samples, 1))
-        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=1), size=(nb_samples, 1))
+        rel_lockdown3_beta = np.random.uniform(rel_lockdown4_beta - 0.05, (rel_lockdown4_beta+0.2).clip(max=0.9), size=(nb_samples, 1))
+        rel_lockdown2_beta = np.random.uniform(rel_lockdown3_beta - 0.05, (rel_lockdown3_beta+0.2).clip(max=0.8), size=(nb_samples, 1))
         rel_postlockdown_beta = np.random.uniform(rel_lockdown2_beta - 0.01, (rel_lockdown2_beta+0.1), size=(nb_samples, 1))
         rel_beta_as = np.random.uniform(0.3, 1, size=(nb_samples, 1))
 
@@ -354,7 +352,7 @@ def build_and_solve_model(t_obs,
             prop_h_to_c = 6/1238  # np.array([[1 / 81, 1 / 81, 1 / 81, 7 / 184, 32 / 200, 38 / 193, 24 / 129, 10 / 88, 5 / 31]])
     else:
         # load df
-        logging.info(f"Loading proportion priors from {load_prior_file}")
+        logging.info(f"Loading proportion priors_params from {load_prior_file}")
 
         if load_prior_file.suffix == '.csv':
             logging.info('Loading csv file')
@@ -622,8 +620,8 @@ def create_y0(args, nb_samples=1, nb_groups=1, e0=None):
 def save_model_variables(model: SamplingNInfectiousModel, base='data/samples'):
     """Saves a sampling models varibles (stored as dictionary) for use later.
 
-    :param model: A solved sampling model.
-    :param base: The base directory at which to store the variables. Default is 'data/model', where 'data/' is the
+    :value model: A solved sampling model.
+    :value base: The base directory at which to store the variables. Default is 'data/model', where 'data/' is the
     outputdirectory and 'model' is the model name.
     """
     nb_groups = model.nb_groups
