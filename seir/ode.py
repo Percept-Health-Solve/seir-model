@@ -93,8 +93,10 @@ class CovidSeirODE(BaseODE):
                     f"Given transition time '{k}' in ode_params has values less than or equal to 0."
 
     def rel_beta_t_func(self, t):
-        if t < 0 or t > self.lockdown_params.cum_periods[-1]:
+        if t < -11 or t > self.lockdown_params.cum_periods[-1]:
             return 1
+        elif -11 <= t < 0:
+            return 1 - (1 - self.lockdown_params.rel_beta_lockdown[0]) / 11 * (t + 11)
         else:
             return self.lockdown_params.rel_beta_lockdown[np.argmin(self.lockdown_params.cum_periods < t)]
 
