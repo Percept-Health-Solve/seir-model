@@ -10,8 +10,8 @@ from seir.parameters import FittingParams
 def log_lognormal_likelihood(model, truth):
     if truth is None:
         return (np.array(0), np.array(0))
-    sigma = np.sqrt(np.mean((np.log(model) - np.log(truth)) ** 2, axis=(0, 1), keepdims=True))
-    log_weights = -1 / 2 * np.log(2 * np.pi * sigma ** 2 + 1e-20) - (np.log(model) - np.log(truth)) ** 2 / (
+    sigma = np.sqrt(np.mean((np.log(model + 1e-20) - np.log(truth + 1e-20)) ** 2, axis=(0, 1), keepdims=True))
+    log_weights = -1 / 2 * np.log(2 * np.pi * sigma ** 2 + 1e-20) - (np.log(model + 1e-20) - np.log(truth + 1e-20)) ** 2 / (
             2 * sigma ** 2)
     return np.sum(log_weights, axis=(0, 1))
 
