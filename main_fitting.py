@@ -351,21 +351,23 @@ def main():
         }
         posterior_dict = fitter.get_posterior_samples(**prior_dict)
 
-        pickle.dump(prior_dict, output_cli.run_path.joinpath(f'run{run:02}_prior_dict.pkl').open('wb'))
-        pickle.dump(posterior_dict, output_cli.run_path.joinpath(f'run{run:02}_posterior_dict.pkl').open('wb'))
+        pickle.dump(prior_dict, output_cli.run_path.joinpath(f'run{run:02}_prior_dict.pkl').open('wb'), protocol=4)
+        pickle.dump(posterior_dict, output_cli.run_path.joinpath(f'run{run:02}_posterior_dict.pkl').open('wb'),
+                    protocol=4)
 
         fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
                                           ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
                                            'mortality_loading', 'hospital_loading', 'e0'])
         plt.tight_layout()
         fig.savefig(output_cli.run_path.joinpath(f'run{run:02}_prior_posterior.png'))
+        print(f'Done run {run}')
 
     prior_dict = process_runs(output_cli.run_path, fitting_cli.nb_runs)
     fitter = BayesSIRFitter(all_solutions, data, FittingParams.from_cli(fitting_cli))
     posterior_dict = fitter.get_posterior_samples(**prior_dict)
 
     # we only save the posterior output as a pickle file for the full run
-    pickle.dump(posterior_dict, output_cli.output_path.joinpath(f'posterior_dict.pkl').open('wb'))
+    pickle.dump(posterior_dict, output_cli.output_path.joinpath(f'posterior_dict.pkl').open('wb'), protocol=4)
 
     fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
                                       ['rel_beta_lockdown', 'r0', 'time_infectious', 'beta',
