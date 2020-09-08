@@ -1,6 +1,3 @@
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -21,10 +18,13 @@ from seir.solvers import ScipyOdeIntSolver
 from seir.data import DsfsiData, CovidData, TimestampData, extend_data_samples, append_data_time
 from seir.fitting import BayesSIRFitter
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 @dataclass
 class DataCLI(BaseCLI):
-
     data_source: str = field(
         default='dsfsi/total',
         metadata={
@@ -89,7 +89,8 @@ class DataCLI(BaseCLI):
         else:
             raise ValueError('--data_source flag does not point to a dsfsi dataset or a local file.')
         self.lockdown_date = '2020/03/27' if self.lockdown_date is None else self.lockdown_date
-        self.lockdown_date_dt = pd.to_datetime(self.lockdown_date, format='%Y/%m/%d') if self.lockdown_date is not None else None
+        self.lockdown_date_dt = pd.to_datetime(self.lockdown_date,
+                                               format='%Y/%m/%d') if self.lockdown_date is not None else None
         self.min_date_dt = pd.to_datetime(self.min_date, format='%Y/%m/%d') if self.min_date is not None else None
         self.max_date_dt = pd.to_datetime(self.max_date, format='%Y/%m/%d') if self.max_date is not None else None
 
@@ -126,7 +127,6 @@ class InitialCLI(BaseDistributionCLI):
 
 @dataclass
 class InputOutputCLI:
-
     from_config: str = field(
         default=None,
         metadata={
@@ -158,10 +158,10 @@ class InputOutputCLI:
         if not self.output_path.is_dir():
             self.output_path.mkdir()
         if (
-            self.output_path.is_dir()
-            and any(self.output_path.iterdir())
-            and not self.from_config
-            and not self.overwrite
+                self.output_path.is_dir()
+                and any(self.output_path.iterdir())
+                and not self.from_config
+                and not self.overwrite
         ):
             raise ValueError('Detected files in output directory. Define a new output directory or use --overwrite to '
                              'overcome.')
@@ -245,7 +245,7 @@ def plot_priors_posterior(prior_dict: dict, posterior_dict: dict, params_to_plot
 def append_samples(a: np.ndarray, b: np.ndarray):
     if isinstance(a, np.ndarray):
         assert isinstance(b, np.ndarray)
-        if a.ndim > 0 and b.ndim > 0:
+        if a.ndim > 0 and b.ndim > 0 and a.shape[-1] > 1 and b.shape[-1] > 1:
             return np.concatenate([a, b], axis=-1)
     return a
 
@@ -269,10 +269,12 @@ def process_runs(run_path: Path, nb_runs: int) -> dict:
 
 def main():
     sns.set(style='darkgrid')
-    argparser = DataClassArgumentParser([MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, InputOutputCLI, DataCLI])
+    argparser = DataClassArgumentParser(
+        [MetaCLI, LockdownCLI, OdeParamCLI, FittingCLI, InitialCLI, InputOutputCLI, DataCLI])
     meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_args_into_dataclasses()
     if output_cli.from_config:
-        meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_json_file(output_cli.from_config)
+        meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli = argparser.parse_json_file(
+            output_cli.from_config)
     save_all_cli_to_config([meta_cli, lockdown_cli, ode_cli, fitting_cli, initial_cli, output_cli, data_cli],
                            directory=output_cli.output_path, exclude=['from_config'])
 
@@ -317,7 +319,7 @@ def main():
         prop_immune = initial_cli.sample_attr('prop_immune', nb_samples=ode_prior.nb_samples)
         y0 = y0 * (1 - prop_immune)
 
-        t = np.arange(max(data.all_timestamps().min(), initial_cli.t0), data.all_timestamps().max()+1)
+        t = np.arange(max(data.all_timestamps().min(), initial_cli.t0), data.all_timestamps().max() + 1)
         if initial_cli.t0 < t.min():
             t = np.concatenate([[initial_cli.t0], t])
 
@@ -329,9 +331,15 @@ def main():
 
         fitter = BayesSIRFitter(solution, data, FittingParams.from_cli(fitting_cli))
 
+        # we'd like to store the full solution in the prior parameters
+        # this will allow the fitter to choose posterior samples from this, in case we ever need it
+        # but this is a LARGE variable, and is bringing ~2Gb to the file with only 10 000 samples
+        # this would also scale like O(n) with the number of samples
+        # this is far too large to store the full array, so we only store the last element of this in
+        # order to seed any extension to the ODE that we make down the line
         prior_dict = {
             **ode_prior.params,
-            'full_solution': full_sol,
+            'last_time_full_sol': full_sol[-1],
             'hospitalised': solution.hospitalised.data,
             'critical': solution.critical.data,
             'infected': solution.infected.data,
@@ -356,7 +364,7 @@ def main():
     fitter = BayesSIRFitter(all_solutions, data, FittingParams.from_cli(fitting_cli))
     posterior_dict = fitter.get_posterior_samples(**prior_dict)
 
-    pickle.dump(prior_dict, output_cli.output_path.joinpath(f'prior_dict.pkl').open('wb'))
+    # we only save the posterior output as a pickle file for the full run
     pickle.dump(posterior_dict, output_cli.output_path.joinpath(f'posterior_dict.pkl').open('wb'))
 
     fig, axes = plot_priors_posterior(prior_dict, posterior_dict,
@@ -373,7 +381,7 @@ def main():
 
     ode_post = CovidSeirODE.from_dict(posterior_dict)
     solve_post = ScipyOdeIntSolver(ode_post)
-    y0_post = posterior_dict['full_solution'][-1]
+    y0_post = posterior_dict['last_time_full_sol']
     t_post = np.arange(t[-1], 300)
     extended_sol = solve_post.solve(y0_post, t_post, exclude_t0=True)
     projections = append_data_time(posterior_solution, extended_sol)
@@ -388,7 +396,7 @@ def main():
 
     fig, axes = plt.subplots(1, 6, figsize=(18, 4))
     projections.plot(axes=axes, plot_daily_deaths=True, group_total=True, timestamp_shift=data.lockdown_date,
-                      plot_kwargs={'color': 'C0'})
+                     plot_kwargs={'color': 'C0'})
     plt.tight_layout()
     fig.savefig(output_cli.output_path.joinpath('predictions_long_term.png'))
 
