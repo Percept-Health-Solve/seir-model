@@ -108,7 +108,7 @@ def test_meta_params():
         meta_params = MetaParams(nb_samples, nb_groups)
         assert meta_params is not None
         assert meta_params.nb_samples == nb_samples
-        assert  meta_params.nb_groups == nb_groups
+        assert meta_params.nb_groups == nb_groups
 
 
 def test_fitting_params():

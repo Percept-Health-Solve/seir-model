@@ -101,6 +101,7 @@ class CovidSeirODE(BaseODE):
             return self.lockdown_params.rel_beta_lockdown[np.argmin(self.lockdown_params.cum_periods < t)]
 
     def __call__(self, y, t):
+        # y[nb_states, nb_groups, nb_samples]
         y = np.asarray(y)
         if y.ndim == 1:
             assert y.size == self.nb_states * self.nb_groups * self.nb_samples

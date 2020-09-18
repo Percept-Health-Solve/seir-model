@@ -48,7 +48,7 @@ class DataCLI(BaseCLI):
         default=None,
         metadata={
             "help": "The day of the start of a lockdown period. The model internally computes time values (such as "
-                    "the seeding time t0) relative to this date. Should be in %Y/%m/%d format. This is not needed when "
+                    "the seeding time t0) relative to this date. Should be in YYYY/mm/dd format. This is not needed when "
                     "DSFSI data is used, as it is set to 2020/03/27)."
         }
     )
