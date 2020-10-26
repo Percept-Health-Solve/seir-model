@@ -124,6 +124,3 @@ The output of the model is sent to the directory given by `--output_dir`. These 
 
 ### References
 [1] Kong, L., Wang, J., Han, W., & Cao, Z. (2016). Modeling heterogeneity in direct infectious disease transmission in a compartmental model. International Journal of Environmental Research and Public Health, 13(3). https://doi.org/10.3390/ijerph13030253
-
-
-
