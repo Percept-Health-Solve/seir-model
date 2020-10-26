@@ -183,7 +183,7 @@ class LockdownCLI(BaseDistributionCLI):
 
     _defaults_dict = {
         'rel_beta_lockdown': REL_BETA_LOCKDOWN_DEFAULT,
-        'rel_beta_period': REL_BETA_PERIOD_DEFAULT
+        'rel_beta_period': REL_BETA_PERIOD_DEFAULT,
     }
 
     rel_beta_lockdown: List[float] = list_field(
@@ -278,7 +278,8 @@ class OdeParamCLI(BaseDistributionCLI):
         'time_c_to_d': TIME_C_TO_D_DEFAULT,
         'contact_k': CONTACT_K_DEFAULT,
         'mortality_loading': MORTALITY_LOADING_DEFAULT,
-        'hospital_loading': HOSPITAL_LOADING_DEFAULT
+        'hospital_loading': HOSPITAL_LOADING_DEFAULT,
+        'smoothing_time': 11,
     }
 
     r0: List[float] = list_field(
@@ -442,6 +443,14 @@ class OdeParamCLI(BaseDistributionCLI):
         metadata={
             "help": "Hospital loading parameter applied to in bound patients. Used to pseudo inform the uncertainty "
                     "in these parameters while keeping the shape of those going to hospital over age groups constant."
+        }
+    )
+
+    smoothing_time: float = field(
+        default=11,
+        metadata={
+            "help": "Period over which the lockdown is smoothed before the lockdown begins. Interpolates the relative "
+                    "beta strength from 1 to the first lockdown beta strength value linearly over the smoothing period."
         }
     )
 

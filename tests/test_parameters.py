@@ -79,6 +79,7 @@ def test_ode_params():
             'contact_k': np.random.uniform(0, 2, size=(1, nb_samples)),
             'hospital_loading': np.random.uniform(0.9, 1.1, size=(1, nb_samples)),
             'mortality_loading': np.random.uniform(0.9, 1.1, size=(1, nb_samples)),
+            'smoothing_time': 11,
         }
 
         ode_params = SampleOdeParams(**kwargs)

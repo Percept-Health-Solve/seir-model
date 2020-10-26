@@ -157,6 +157,7 @@ class SampleOdeParams(BaseSampleParams):
     prop_s_adj: Union[float, np.ndarray] = field(init=False)
     prop_h_to_d_adj: Union[float, np.ndarray] = field(init=False)
     prop_c_to_d_adj: Union[float, np.ndarray] = field(init=False)
+    smoothing_time: float = 11
 
     def __post_init__(self):
         self.beta = self.r0 / self.time_infectious
@@ -169,6 +170,7 @@ class SampleOdeParams(BaseSampleParams):
         self.prop_c_to_r = 1 - self.prop_c_to_d_adj
         self.time_rsh_to_h = self.time_s_to_h - self.time_infectious
         self.time_rsc_to_c = self.time_s_to_c - self.time_infectious
+        self.smoothing_time = abs(self.smoothing_time)
         self._assert_shapes()
         # TODO: Flesh out asserts
         assert np.all(np.abs(self.prop_a + self.prop_m + self.prop_s_adj - 1) < 1e-15)
