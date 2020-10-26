@@ -1,5 +1,15 @@
+# sensitive NDA data
+sensitive/
+
+# pytest
+.pytest_cache/
+
+# vs code
+.vscode/
+
 .idea/
 data/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

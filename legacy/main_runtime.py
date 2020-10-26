@@ -2,10 +2,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import time
+
 import datetime
 
 from seir.wrapper import MultiPopWrapper
 from seir.utils import plot_solution
+
 
 # read calibration data
 actual_hospitalisations = pd.read_excel('data/calibration.xlsx', sheet_name='Hospitalisations')
@@ -29,6 +32,7 @@ actual_deaths.rename(columns={'report_id': 'Daily deaths'}, inplace=True)
 actual_deaths.index = pd.to_datetime(actual_deaths['Date'])
 actual_deaths = actual_deaths.resample('D').mean().fillna(0).reset_index()
 actual_deaths['Cum. Deaths'] = np.cumsum(actual_deaths['Daily deaths'])
+
 
 # variable parameters for front-end
 asymptomatic_prop = 0.75  # 0.2-0.8
@@ -154,113 +158,81 @@ init_vectors = {
     'i_0': {'30-39_male_high': [0, 0, 0, 0, 0, 0]}
 }
 
-model = MultiPopWrapper(
-    pop_categories={'age': ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
-                    'sex': ['male', 'female'],
-                    'density': ['high', 'low']
-                    },
-    inf_labels=['AS', 'M', 'S', 'SI', 'H', 'ICU'],
-    alpha={'0-9': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['0-9'][0]),
-                   (1 - asymptomatic_prop) * ferguson['0-9'][0], 0, 0, 0],
-           '10-19': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['10-19'][0]),
-                     (1 - asymptomatic_prop) * ferguson['10-19'][0], 0, 0, 0],
-           '20-29': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['20-29'][0]),
-                     (1 - asymptomatic_prop) * ferguson['20-29'][0], 0, 0, 0],
-           '30-39': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['30-39'][0]),
-                     (1 - asymptomatic_prop) * ferguson['30-39'][0], 0, 0, 0],
-           '40-49': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['40-49'][0]),
-                     (1 - asymptomatic_prop) * ferguson['40-49'][0], 0, 0, 0],
-           '50-59': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['50-59'][0]),
-                     (1 - asymptomatic_prop) * ferguson['50-59'][0], 0, 0, 0],
-           '60-69': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['60-69'][0]),
-                     (1 - asymptomatic_prop) * ferguson['60-69'][0], 0, 0, 0],
-           '70-79': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['70-79'][0]),
-                     (1 - asymptomatic_prop) * ferguson['70-79'][0], 0, 0, 0],
-           '80+': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['80+'][0]),
-                   (1 - asymptomatic_prop) * ferguson['80+'][0], 0, 0, 0]},
-    t_inc=5.1,
-    q_se=[asymp_rel_infectivity, 1, 1, 0, 0, 0],
-    q_ii=[
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 1 / period_severe_infect, 0, 0, 0],
-        [0, 0, -1 / period_severe_infect, 1 / period_severe_isolate, 0, 0],
-        [0, 0, 0, -1 / period_severe_isolate, 1 / period_hosp_if_icu, 0],
-        [0, 0, 0, 0, -1 / period_hosp_if_icu, 0]
-    ],
-    q_ir=[1 / period_asymp, 1 / period_mild_infect, 0, 0, 1 / period_hosp_if_not_icu, 1 / period_icu_if_recover],
-    q_id=[0, 0, 0, 0, 0, 1 / period_icu_if_die],
-    rho_delta={'0-9': [0, 0, 1, 1, ferguson['0-9'][1] * icu_adjustment, 0],
-               '10-19': [0, 0, 1, 1, ferguson['10-19'][1] * icu_adjustment, 0],
-               '20-29': [0, 0, 1, 1, ferguson['20-29'][1] * icu_adjustment, 0],
-               '30-39': [0, 0, 1, 1, ferguson['30-39'][1] * icu_adjustment, 0],
-               '40-49': [0, 0, 1, 1, ferguson['40-49'][1] * icu_adjustment, 0],
-               '50-59': [0, 0, 1, 1, ferguson['50-59'][1] * icu_adjustment, 0],
-               '60-69': [0, 0, 1, 1, ferguson['60-69'][1] * icu_adjustment, 0],
-               '70-79': [0, 0, 1, 1, ferguson['70-79'][1] * icu_adjustment, 0],
-               '80+': [0, 0, 1, 1, ferguson['80+'][1] * icu_adjustment, 0]},
-    rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3] * mort_loading],
-              '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3] * mort_loading],
-              '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3] * mort_loading],
-              '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3] * mort_loading],
-              '40-49': [0, 0, 0, 0, 0, ferguson['40-49'][3] * mort_loading],
-              '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3] * mort_loading],
-              '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3] * mort_loading],
-              '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3] * mort_loading],
-              '80+': [0, 0, 0, 0, 0, ferguson['80+'][3] * mort_loading]},
-    infectious_func=infectious_func,
-    imported_func=imported_func,
-    init_vectors=init_vectors,
-    extend_vars=True
-)
+# begin timing loop
+loops = 100
+loop_times = []
+start = time.time()
+for i in range(loops):
+    loop_start = time.time()
+    model = MultiPopWrapper(
+        pop_categories={'age': ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'],
+                        'sex': ['male', 'female'],
+                        'density': ['high', 'low']
+                        },
+        inf_labels=['AS', 'M', 'S', 'SI', 'H', 'ICU'],
+        alpha={'0-9': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['0-9'][0]),
+                       (1 - asymptomatic_prop) * ferguson['0-9'][0], 0, 0, 0],
+               '10-19': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['10-19'][0]),
+                         (1 - asymptomatic_prop) * ferguson['10-19'][0], 0, 0, 0],
+               '20-29': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['20-29'][0]),
+                         (1 - asymptomatic_prop) * ferguson['20-29'][0], 0, 0, 0],
+               '30-39': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['30-39'][0]),
+                         (1 - asymptomatic_prop) * ferguson['30-39'][0], 0, 0, 0],
+               '40-49': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['40-49'][0]),
+                         (1 - asymptomatic_prop) * ferguson['40-49'][0], 0, 0, 0],
+               '50-59': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['50-59'][0]),
+                         (1 - asymptomatic_prop) * ferguson['50-59'][0], 0, 0, 0],
+               '60-69': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['60-69'][0]),
+                         (1 - asymptomatic_prop) * ferguson['60-69'][0], 0, 0, 0],
+               '70-79': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['70-79'][0]),
+                         (1 - asymptomatic_prop) * ferguson['70-79'][0], 0, 0, 0],
+               '80+': [asymptomatic_prop, (1 - asymptomatic_prop) * (1 - ferguson['80+'][0]),
+                       (1 - asymptomatic_prop) * ferguson['80+'][0], 0, 0, 0]},
+        t_inc=5.1,
+        q_se=[asymp_rel_infectivity, 1, 1, 0, 0, 0],
+        q_ii=[
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 1 / period_severe_infect, 0, 0, 0],
+            [0, 0, -1 / period_severe_infect, 1 / period_severe_isolate, 0, 0],
+            [0, 0, 0, -1 / period_severe_isolate, 1 / period_hosp_if_icu, 0],
+            [0, 0, 0, 0, -1 / period_hosp_if_icu, 0]
+        ],
+        q_ir=[1 / period_asymp, 1 / period_mild_infect, 0, 0, 1 / period_hosp_if_not_icu, 1 / period_icu_if_recover],
+        q_id=[0, 0, 0, 0, 0, 1 / period_icu_if_die],
+        rho_delta={'0-9': [0, 0, 1, 1, ferguson['0-9'][1] * icu_adjustment, 0],
+                   '10-19': [0, 0, 1, 1, ferguson['10-19'][1] * icu_adjustment, 0],
+                   '20-29': [0, 0, 1, 1, ferguson['20-29'][1] * icu_adjustment, 0],
+                   '30-39': [0, 0, 1, 1, ferguson['30-39'][1] * icu_adjustment, 0],
+                   '40-49': [0, 0, 1, 1, ferguson['40-49'][1] * icu_adjustment, 0],
+                   '50-59': [0, 0, 1, 1, ferguson['50-59'][1] * icu_adjustment, 0],
+                   '60-69': [0, 0, 1, 1, ferguson['60-69'][1] * icu_adjustment, 0],
+                   '70-79': [0, 0, 1, 1, ferguson['70-79'][1] * icu_adjustment, 0],
+                   '80+': [0, 0, 1, 1, ferguson['80+'][1] * icu_adjustment, 0]},
+        rho_beta={'0-9': [0, 0, 0, 0, 0, ferguson['0-9'][3] * mort_loading],
+                  '10-19': [0, 0, 0, 0, 0, ferguson['10-19'][3] * mort_loading],
+                  '20-29': [0, 0, 0, 0, 0, ferguson['20-29'][3] * mort_loading],
+                  '30-39': [0, 0, 0, 0, 0, ferguson['30-39'][3] * mort_loading],
+                  '40-49': [0, 0, 0, 0, 0, ferguson['40-49'][3] * mort_loading],
+                  '50-59': [0, 0, 0, 0, 0, ferguson['50-59'][3] * mort_loading],
+                  '60-69': [0, 0, 0, 0, 0, ferguson['60-69'][3] * mort_loading],
+                  '70-79': [0, 0, 0, 0, 0, ferguson['70-79'][3] * mort_loading],
+                  '80+': [0, 0, 0, 0, 0, ferguson['80+'][3] * mort_loading]},
+        infectious_func=infectious_func,
+        imported_func=imported_func,
+        init_vectors=init_vectors,
+        extend_vars=True
+    )
 
-periods_per_day = 5
-t = np.linspace(0, 300, 300 * periods_per_day + 1)
-model.q_se = model.q_se * r0 / model.r_0
-print(model.q_se)
-solution = model.solve(t, to_csv=True, fp='data/solution.csv')
+    periods_per_day = 5
+    t = np.linspace(0, 300, 300 * periods_per_day + 1)
+    model.q_se = model.q_se * r0 / model.r_0
+    solution = model.solve(t)
+    loop_end = time.time()
+    loop_times.append(loop_end - loop_start)
 
-s_t, e_t, i_t, r_t, d_t = solution
-s_total = np.sum(s_t, axis=-1)
-e_total = np.sum(e_t, axis=-1)
-a_total = np.sum(i_t[:, :, 0], axis=-1)
-i_total = np.sum(i_t[:, :, 1], axis=-1)
-sev_total = np.sum(i_t[:, :, 2:], axis=(1, 2))
-h_total = np.sum(i_t[:, :, -2], axis=-1)
-icu_total = np.sum(i_t[:, :, -1], axis=-1)
-detected_total = prop_mild_detected * np.sum(i_t[:, :, 1] + r_t[:, :, 1] + d_t[:, :, 1], axis=-1) \
-                 + np.sum(i_t[:, :, 2:] + r_t[:, :, 2:] + d_t[:, :, 2:], axis=(1, 2))
-r_total = np.sum(r_t, axis=(1, 2))
-d_total = np.sum(d_t, axis=(1, 2))
+end = time.time()
 
-df_total = pd.DataFrame(np.concatenate(
-    [[s_total], [e_total], [a_total], [i_total], [sev_total], [h_total], [icu_total], [r_total], [d_total],
-     [detected_total]]).T,
-                        columns=['S', 'E', 'Asymptomatic', 'Mild', 'Severe Total', 'Hospitalised', 'ICU', 'R', 'Dead',
-                                 'Cumulative Detected'])
-df_total['Time'] = t
-df_total = df_total[[x == int(x) for x in df_total['Time']]]
-df_total['Day'] = [datetime.date(2020, 3, 5) + datetime.timedelta(days=t) for t in df_total['Time']]
-df_total.drop(columns='Time', inplace=True)
-cols = list(df_total.columns)
-cols = [cols[-1]] + cols[:-1]
-df_total = df_total[cols]
-df_total['Cumulative Infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total'] + df_total[
-    'R'] + df_total['Dead']
-df_total['IFR'] = df_total['Dead'] / df_total['Cumulative Infections']
-df_total['CFR'] = df_total['Dead'] / df_total['Cumulative Detected']
-df_total['Total hospitalised'] = [a + b for a, b in zip(df_total['Hospitalised'], df_total['ICU'])]
-df_total['Active infections'] = df_total['Asymptomatic'] + df_total['Mild'] + df_total['Severe Total']
-df_total.to_csv('data/daily_output_' + descr + '.csv', index=False)
-
-# plot output
-fig, axes = plot_solution(df_total, full_descr, actual_infections, actual_hospitalisations, actual_deaths, 45, 90)
-fig.savefig('data/output_' + descr + '.png')
-
-plt.stackplot(
-    np.asarray(df_total['Day']),
-    np.asarray(df_total['Active infections']), np.asarray(df_total['S']), np.asarray(df_total['E']),
-    np.asarray(df_total['R']), np.asarray(df_total['Dead']),
-    labels=['I', 'S', 'E', 'R', 'D'],
-    colors=['red', 'lightgray', 'blue', 'green', 'black']
-)
+print(f"Total time for {loops} loops: {end - start}")
+print(f"Average per loop: {(end-start)/loops}")
+print(f"Std of {loops} loops: {np.std(loop_times)}")
